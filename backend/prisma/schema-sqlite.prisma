@@ -1,0 +1,175 @@
+// schema-sqlite.prisma - Versión SQLite para desarrollo local
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ============================================
+// MODELO PRINCIPAL: VENTA
+// ============================================
+
+model Venta {
+  id                    String      @id @default(cuid())
+  
+  // === INFORMACIÓN GENERAL DEL DUT ===
+  establecimientoEmisor String      // "LOCHIEL" o "CABO_CURIOSO"
+  numeroDUT             String      @unique // Número del DUT emitido
+  titularDestino        String      // Cliente que compra
+  numeroRespaDestino    String?     // Número sanitario del establecimiento comprador
+  fechaEmisionDUT       DateTime    // Fecha de emisión del DUT
+  fechaCargaDUT         DateTime    // Fecha de carga del DUT
+  fechaVencimientoDUT   DateTime?   // Fecha de vencimiento del DUT
+  motivo                String      // FAENA, FAENA_UE, CRIA
+  categoria             String      // OVEJA, BORREGO, CORDERO, etc.
+  valorDUT              Float       @default(0) // Costo de emisión del DUT
+  valorGuia             Float       @default(0) // Costo de guía (solo Lochiel)
+  
+  // === CONTROL DE CANTIDADES (Triple control) ===
+  cantidadEnDUT         Int         // Cantidad autorizada en el DUT (ej: 300)
+  
+  fechaCargaReal        DateTime?   // Fecha real del remito (puede coincidir con DUT)
+  cantidadCargada       Int?        // Cantidad real retirada del campo (ej: 290)
+  
+  cantidadRomaneo       Int?        // Cantidad recibida en frigorífico (ej: 288)
+  
+  // === FAENA ===
+  totalKgs              Float?      // Kilos totales obtenidos (ej: 8640.00)
+  kiloLimpioPorCabeza   Float?      // Peso promedio por animal (ej: 30.00)
+  
+  // === PRECIOS Y CÁLCULOS ===
+  precioKg              Float?      // Precio por kilo en USD
+  precioCabeza          Float?      // Precio por unidad (si aplica)
+  importeEnUSD          Float?      // Total en dólares
+  
+  tipoCambio            Float?      // TC al momento del pago/cierre (ej: 1220.5000)
+  importeOriginal       Float?      // Importe en pesos (USD × TC)
+  importeNeto           Float?      // Importe neto después de ajustes
+  
+  // === FACTURACIÓN ===
+  iva                   Float       @default(10.5) // IVA 10.5%
+  totalOperacion        Float?      // Total con IVA incluido
+  retencion             Float       @default(0) // Retenciones impositivas
+  
+  totalAPagar           Float?      // Neto final a cobrar
+  totalPagado           Float       @default(0) // Lo que ya se pagó
+  
+  sinFacturar           Boolean     @default(false) // Flag: esta operación no lleva factura
+  numeroFactura         String?     // N° de factura emitida
+  
+  // === INFORMACIÓN DE PAGO ===
+  formaPago             String?     // Transferencia, Efectivo, Cheque
+  dondeSeAcredita       String?     // Banco/cuenta donde se acredita (ej: "CREDICOOP")
+  fechaPago             DateTime?   // Fecha del pago principal
+  
+  // === ADICIONALES ===
+  observaciones         String?     // Observaciones
+  
+  // === ESTADO DEL CICLO DE VENTA ===
+  estado                String      @default("PENDIENTE")
+  
+  // === RELACIONES ===
+  documentos            Documento[]
+  pagos                 Pago[]      // Para registrar pagos parciales
+  alertas               Alerta[]
+  
+  // === TIMESTAMPS ===
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+}
+
+// ============================================
+// DOCUMENTOS ASOCIADOS
+// ============================================
+
+model Documento {
+  id              String          @id @default(cuid())
+  ventaId         String
+  venta           Venta           @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  
+  tipo            String          // DUT, REMITO_CAMPO, ROMANEO, etc.
+  nombreArchivo   String          // Nombre original del archivo
+  url             String          // URL en Supabase Storage
+  mimeType        String          // image/jpeg, application/pdf, etc
+  tamano          Int             // Tamaño en bytes
+  
+  // OCR (para romaneos manuscritos - Fase 2)
+  datosExtraidos  String?         // Datos extraídos con OCR (JSON string)
+  procesadoOCR    Boolean         @default(false)
+  
+  fechaCarga      DateTime        @default(now())
+}
+
+// ============================================
+// PAGOS (Parciales o totales)
+// ============================================
+
+model Pago {
+  id              String      @id @default(cuid())
+  ventaId         String
+  venta           Venta       @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  
+  monto           Float
+  moneda          String      @default("ARS") // ARS, USD
+  tipoCambio      Float?      // Si el pago es en USD
+  
+  fecha           DateTime
+  formaPago       String      // TRANSFERENCIA, EFECTIVO, CHEQUE, etc.
+  referencia      String?     // N° de cheque, transferencia, etc
+  dondeSeAcredita String?     // Banco/cuenta
+  
+  comprobanteUrl  String?     // URL del comprobante en Storage
+  observaciones   String?
+  
+  createdAt       DateTime    @default(now())
+}
+
+// ============================================
+// SISTEMA DE ALERTAS
+// ============================================
+
+model Alerta {
+  id              String      @id @default(cuid())
+  ventaId         String
+  venta           Venta       @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  
+  tipo            String      // DIFERENCIA_CANTIDAD, PAGO_VENCIDO, etc.
+  mensaje         String      // Mensaje de la alerta
+  severidad       String      @default("MEDIA") // BAJA, MEDIA, ALTA, CRITICA
+  resuelta        Boolean     @default(false)
+  
+  fechaCreacion   DateTime    @default(now())
+  fechaResolucion DateTime?
+}
+
+// ============================================
+// USUARIOS (Sistema interno)
+// ============================================
+
+model Usuario {
+  id              String      @id @default(cuid())
+  email           String      @unique
+  password        String      // Hash con bcryptjs
+  nombre          String
+  rol             String      @default("ADMIN") // ADMIN, USUARIO
+  activo          Boolean     @default(true)
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+// ============================================
+// CONFIGURACIÓN DEL SISTEMA
+// ============================================
+
+model Configuracion {
+  id              String      @id @default(cuid())
+  clave           String      @unique  // Ej: "TC_USD_BLUE"
+  valor           String      // Valor de la configuración
+  descripcion     String?
+  
+  updatedAt       DateTime    @updatedAt
+}

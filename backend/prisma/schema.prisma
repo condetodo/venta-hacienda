@@ -1,0 +1,270 @@
+// schema.prisma - Modelo completo del sistema de gestión de venta de hacienda ovina
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// MODELO PRINCIPAL: VENTA
+// ============================================
+
+model Venta {
+  id                    String      @id @default(uuid())
+  
+  // === INFORMACIÓN GENERAL DEL DUT ===
+  establecimientoEmisor Establecimiento // "LOCHIEL" o "CABO_CURIOSO"
+  numeroDUT             String      @unique // Número del DUT emitido
+  titularDestino        String      // Cliente que compra
+  numeroRespaDestino    String?     // Número sanitario del establecimiento comprador
+  fechaEmisionDUT       DateTime    // Fecha de emisión del DUT
+  fechaCargaDUT         DateTime    // Fecha de carga del DUT
+  fechaVencimientoDUT   DateTime?   // Fecha de vencimiento del DUT
+  motivo                String      // Motivo de la venta (ej: "Reproducción UE", "Faena", "Cría")
+  categoria             CategoriaAnimal // OVEJA, BORREGO, CORDERO, etc.
+  valorDUT              Decimal     @default(0) @db.Decimal(10, 2) // Costo de emisión del DUT
+  valorGuia             Decimal     @default(0) @db.Decimal(10, 2) // Costo de guía (solo Lochiel)
+  
+  // === CONTROL DE CANTIDADES (Triple control) ===
+  cantidadEnDUT         Int         // Cantidad autorizada en el DUT (ej: 300)
+  
+  fechaCargaReal        DateTime?   // Fecha real del remito (puede coincidir con DUT)
+  cantidadCargada       Int?        // Cantidad real retirada del campo (ej: 290)
+  
+  cantidadRomaneo       Int?        // Cantidad recibida en frigorífico (ej: 288)
+  
+  // === FAENA ===
+  totalKgs              Decimal?    @db.Decimal(10, 2) // Kilos totales obtenidos (ej: 8640.00)
+  kiloLimpioPorCabeza   Decimal?    @db.Decimal(10, 2) // Peso promedio por animal (ej: 30.00)
+  
+  // === PRECIOS Y CÁLCULOS ===
+  precioKg              Decimal?    @db.Decimal(10, 2) // Precio por kilo en USD
+  precioCabeza          Decimal?    @db.Decimal(10, 2) // Precio por unidad (si aplica)
+  importeEnUSD          Decimal?    @db.Decimal(15, 2) // Total en dólares
+  
+  tipoCambio            Decimal?    @db.Decimal(10, 4) // TC al momento del pago/cierre (ej: 1220.5000)
+  importeOriginal       Decimal?    @db.Decimal(15, 2) // Importe en pesos (USD × TC)
+  importeNeto           Decimal?    @db.Decimal(15, 2) // Importe neto después de ajustes
+  
+  // === FACTURACIÓN ===
+  iva                   Decimal     @default(10.5) @db.Decimal(5, 2) // IVA 10.5%
+  totalOperacion        Decimal?    @db.Decimal(15, 2) // Total con IVA incluido
+  retencion             Decimal     @default(0) @db.Decimal(15, 2) // Retenciones impositivas
+  
+  totalAPagar           Decimal?    @db.Decimal(15, 2) // Neto final a cobrar
+  totalPagado           Decimal     @default(0) @db.Decimal(15, 2) // Lo que ya se pagó
+  
+  sinFacturar           Boolean     @default(false) // Flag: esta operación no lleva factura
+  numeroFactura         String?     // N° de factura emitida
+  
+  // === INFORMACIÓN DE PAGO ===
+  formaPago             FormaPago?  // Transferencia, Efectivo, Cheque
+  dondeSeAcredita       String?     // Banco/cuenta donde se acredita (ej: "CREDICOOP")
+  fechaPago             DateTime?   // Fecha del pago principal
+  
+  // === ADICIONALES ===
+  observaciones         String?     @db.Text
+  
+  // === ESTADO DEL CICLO DE VENTA ===
+  estado                EstadoVenta @default(PENDIENTE)
+  
+  // === RELACIONES ===
+  documentos            Documento[]
+  pagos                 Pago[]      // Para registrar pagos parciales
+  alertas               Alerta[]
+  
+  // === TIMESTAMPS ===
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  
+  @@index([numeroDUT])
+  @@index([titularDestino])
+  @@index([estado])
+  @@index([fechaEmisionDUT])
+}
+
+// ============================================
+// DOCUMENTOS ASOCIADOS
+// ============================================
+
+model Documento {
+  id              String          @id @default(uuid())
+  ventaId         String
+  venta           Venta           @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  
+  tipo            TipoDocumento
+  nombreArchivo   String          // Nombre original del archivo
+  url             String          // URL en Supabase Storage
+  mimeType        String          // image/jpeg, application/pdf, etc
+  tamano          Int             // Tamaño en bytes
+  
+  // OCR (para romaneos manuscritos - Fase 2)
+  datosExtraidos  Json?           // Datos extraídos con OCR
+  procesadoOCR    Boolean         @default(false)
+  
+  fechaCarga      DateTime        @default(now())
+  
+  @@index([ventaId])
+  @@index([tipo])
+}
+
+// ============================================
+// PAGOS (Parciales o totales)
+// ============================================
+
+model Pago {
+  id              String      @id @default(uuid())
+  ventaId         String
+  venta           Venta       @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  
+  monto           Decimal     @db.Decimal(15, 2)
+  moneda          Moneda      @default(ARS)
+  tipoCambio      Decimal?    @db.Decimal(10, 4) // Si el pago es en USD
+  
+  fecha           DateTime
+  formaPago       FormaPago
+  referencia      String?     // N° de cheque, transferencia, etc
+  dondeSeAcredita String?     // Banco/cuenta
+  
+  comprobanteUrl  String?     // URL del comprobante en Storage
+  observaciones   String?
+  
+  createdAt       DateTime    @default(now())
+  
+  @@index([ventaId])
+  @@index([fecha])
+}
+
+// ============================================
+// SISTEMA DE ALERTAS
+// ============================================
+
+model Alerta {
+  id              String      @id @default(uuid())
+  ventaId         String
+  venta           Venta       @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  
+  tipo            TipoAlerta
+  mensaje         String      @db.Text
+  severidad       Severidad   @default(MEDIA)
+  resuelta        Boolean     @default(false)
+  
+  fechaCreacion   DateTime    @default(now())
+  fechaResolucion DateTime?
+  
+  @@index([ventaId])
+  @@index([resuelta])
+  @@index([severidad])
+}
+
+// ============================================
+// USUARIOS (Sistema interno)
+// ============================================
+
+model Usuario {
+  id              String      @id @default(uuid())
+  email           String      @unique
+  password        String      // Hash con bcryptjs
+  nombre          String
+  rol             RolUsuario  @default(ADMIN)
+  activo          Boolean     @default(true)
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([email])
+}
+
+// ============================================
+// CONFIGURACIÓN DEL SISTEMA
+// ============================================
+
+model Configuracion {
+  id              String      @id @default(uuid())
+  clave           String      @unique  // Ej: "TC_USD_BLUE"
+  valor           String      // Valor de la configuración
+  descripcion     String?
+  
+  updatedAt       DateTime    @updatedAt
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Establecimiento {
+  LOCHIEL              // Establecimiento Lochiel
+  CABO_CURIOSO         // Establecimiento Cabo Curioso
+}
+
+enum MotivoVenta {
+  FAENA                // Para faena
+  FAENA_UE             // Para faena UE
+  CRIA                 // Para cría
+}
+
+enum CategoriaAnimal {
+  OVEJA                // Oveja
+  BORREGO              // Borrego
+  CORDERO              // Cordero
+  CAPON                // Capón
+  CARNERO               // Carnero
+  BORREGA              // Borrega
+}
+
+enum TipoDocumento {
+  DUT                  // PDF del DUT emitido por SIGSA
+  REMITO_CAMPO         // Remito de salida del campo
+  ROMANEO              // Romaneo del frigorífico (PDF o imagen)
+  LIQUIDACION          // Liquidación del frigorífico
+  FACTURA              // Factura emitida
+  COMPROBANTE_PAGO     // Comprobante de pago
+  OTRO                 // Otros documentos
+}
+
+enum FormaPago {
+  TRANSFERENCIA        // Transferencia bancaria
+  EFECTIVO             // Efectivo
+  CHEQUE               // Cheque físico
+  CHEQUE_ELECTRONICO   // E-CHEQ
+}
+
+enum Moneda {
+  ARS                  // Pesos argentinos
+  USD                  // Dólares estadounidenses
+}
+
+enum EstadoVenta {
+  PENDIENTE           // Recién creada, DUT emitido
+  RETIRADO            // Animales retirados del campo
+  EN_FRIGORIFICO      // En proceso de faena
+  LIQUIDADO           // Liquidación recibida del frigorífico
+  FACTURADO           // Factura emitida
+  PAGO_PARCIAL        // Pagos parciales realizados
+  FINALIZADO          // Todo pagado y cerrado
+  CANCELADO           // Operación cancelada
+}
+
+enum TipoAlerta {
+  DIFERENCIA_CANTIDAD     // Discrepancia entre DUT, remito y romaneo
+  DIFERENCIA_KILOS        // Kilos esperados vs recibidos
+  PAGO_VENCIDO           // Pago vencido según condiciones
+  DOCUMENTO_FALTANTE     // Falta documentación requerida
+  ERROR_CALCULO          // Error en liquidación o cálculos
+  PRECIO_DISCREPANTE     // Precio en liquidación difiere del pactado
+}
+
+enum Severidad {
+  BAJA                // Informativa, no requiere acción inmediata
+  MEDIA               // Requiere atención
+  ALTA                // Requiere acción pronta
+  CRITICA             // Requiere acción inmediata
+}
+
+enum RolUsuario {
+  ADMIN               // Acceso total
+  USUARIO             // Acceso limitado (futuro)
+}
