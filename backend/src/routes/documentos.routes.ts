@@ -9,6 +9,7 @@ const router = Router();
 router.use(authenticateToken);
 
 // Rutas de documentos
+router.get('/test-supabase', documentosController.testSupabase);
 router.get('/venta/:ventaId', documentosController.getByVenta);
 router.post('/upload/:ventaId', upload.array('files', 5), handleUploadError, documentosController.upload);
 router.get('/:id/download', documentosController.download);

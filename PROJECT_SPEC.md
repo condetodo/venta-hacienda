@@ -109,9 +109,11 @@ Cada venta tiene documentos asociados:
 
 #### Desarrollo Local
 - **Supabase** (PostgreSQL local + Storage)
-- Levantado con Supabase CLI
+- Levantado con Supabase CLI + Docker Desktop
 - PostgreSQL en `localhost:54322`
-- Storage API en `localhost:54321`
+- Supabase Studio en `localhost:54323`
+- Supabase API Gateway en `localhost:54321`
+- Inbucket (Email testing) en `localhost:54324`
 
 #### Producción
 - **Railway PostgreSQL** - Base de datos principal
@@ -121,7 +123,8 @@ Cada venta tiene documentos asociados:
 - **API Dólar**: dolarapi.com o bluelytics (gratuitas)
   - Cotizaciones: Blue, MEP, CCL, Oficial
 
-### Despliegue
+### Containerización y Despliegue
+- **Docker** - Contenedores para desarrollo local (Supabase)
 - **Railway** - Backend + PostgreSQL de producción
 - **Vercel** - Frontend de producción
 - **Supabase** - PostgreSQL + Storage de desarrollo, Storage de producción
@@ -614,22 +617,90 @@ if (totalPagado > totalAPagar) {
 
 ---
 
-## 6. CONFIGURACIÓN DE AMBIENTES
+## 6. DOCKER Y CONTAINERIZACIÓN
+
+### Arquitectura de Contenedores
+
+El proyecto utiliza **Supabase** para el entorno de desarrollo local, que automáticamente gestiona múltiples contenedores Docker:
+
+#### Contenedores de Supabase
+- **supabase/postgres** - Base de datos PostgreSQL
+- **supabase/studio** - Interfaz web de administración
+- **supabase/kong** - API Gateway y proxy
+- **supabase/postgrest** - API REST automática
+- **supabase/realtime** - WebSockets en tiempo real
+- **supabase/gotrue** - Sistema de autenticación
+- **supabase/storage-api** - API de almacenamiento de archivos
+- **supabase/postgres-meta** - Metadatos de la base de datos
+- **supabase/edge-runtime** - Runtime para Edge Functions
+- **supabase/mailpit** - Servidor de email para testing
+
+#### Puertos Utilizados
+- `54321` - Supabase API Gateway (Kong)
+- `54322` - PostgreSQL
+- `54323` - Supabase Studio
+- `54324` - Inbucket (Email testing)
+
+### Gestión de Contenedores
+
+```bash
+# Iniciar todos los servicios de Supabase
+supabase start
+
+# Ver estado de los contenedores
+supabase status
+
+# Ver logs de todos los servicios
+supabase logs
+
+# Ver logs de un servicio específico
+supabase logs --service postgres
+
+# Detener todos los servicios
+supabase stop
+
+# Reiniciar servicios
+supabase restart
+
+# Limpiar contenedores y volúmenes
+supabase stop --no-backup
+```
+
+### Ventajas de usar Supabase + Docker
+
+1. **Consistencia**: Mismo entorno en todos los desarrolladores
+2. **Aislamiento**: Servicios independientes y aislados
+3. **Facilidad**: Un solo comando levanta toda la infraestructura
+4. **Escalabilidad**: Fácil migración a producción
+5. **Debugging**: Logs centralizados y herramientas de monitoreo
+
+---
+
+## 7. CONFIGURACIÓN DE AMBIENTES
 
 ### Desarrollo Local
 
+**Prerrequisitos:**
+- Node.js >= 18.0.0
+- npm >= 9.0.0
+- Docker Desktop (debe estar ejecutándose)
+- Supabase CLI
+
 **Stack:**
 - PostgreSQL: Supabase local (puerto 54322)
-- Storage: Supabase Storage local (puerto 54321)
+- Supabase Studio: http://localhost:54323
+- Supabase API Gateway: http://localhost:54321
+- Inbucket (Email): http://localhost:54324
 - Backend: http://localhost:3000
 - Frontend: http://localhost:5173
 
 **Levantar entorno:**
 ```bash
-# 1. Iniciar Supabase (PostgreSQL + Storage)
+# 1. Asegurar que Docker Desktop esté ejecutándose
+# 2. Iniciar Supabase (PostgreSQL + Storage + otros servicios)
 supabase start
 
-# 2. Backend
+# 3. Backend
 cd backend
 npm install
 cp .env.example .env.local
@@ -637,12 +708,27 @@ cp .env.example .env.local
 npm run db:push
 npm run dev
 
-# 3. Frontend
+# 4. Frontend
 cd frontend
 npm install
 cp .env.example .env.local
 # Editar .env.local
 npm run dev
+```
+
+**Comandos útiles de Supabase:**
+```bash
+# Ver estado de todos los servicios
+supabase status
+
+# Ver logs de los contenedores
+supabase logs
+
+# Detener todos los servicios
+supabase stop
+
+# Reiniciar servicios
+supabase restart
 ```
 
 ### Producción
@@ -659,7 +745,7 @@ npm run dev
 
 ---
 
-## 7. VARIABLES DE ENTORNO
+## 8. VARIABLES DE ENTORNO
 
 ### Backend - `.env.local` (Desarrollo)
 
@@ -759,7 +845,7 @@ VITE_SUPABASE_ANON_KEY="tu-anon-key"
 
 ---
 
-## 8. ESTRUCTURA DEL PROYECTO
+## 9. ESTRUCTURA DEL PROYECTO
 
 ```
 hacienda-app/
@@ -880,7 +966,7 @@ hacienda-app/
 
 ---
 
-## 9. SCRIPTS NPM
+## 10. SCRIPTS NPM
 
 ### Backend
 
@@ -919,7 +1005,7 @@ hacienda-app/
 
 ---
 
-## 10. SEGURIDAD
+## 11. SEGURIDAD
 
 ### Validación de archivos
 - Tamaño máximo: 10MB por archivo
@@ -946,7 +1032,7 @@ hacienda-app/
 
 ---
 
-## 11. PRIORIDADES DE DESARROLLO
+## 12. PRIORIDADES DE DESARROLLO
 
 ### Sprint 1 (Semanas 1-2): Fundación
 - ✅ Setup del proyecto (Frontend + Backend)
@@ -978,7 +1064,7 @@ hacienda-app/
 
 ---
 
-## 12. CONSIDERACIONES TÉCNICAS
+## 13. CONSIDERACIONES TÉCNICAS
 
 ### Performance
 - Paginación en lista de ventas (20 items por página)
@@ -1010,7 +1096,7 @@ hacienda-app/
 
 ---
 
-## 13. NOTAS IMPORTANTES
+## 14. NOTAS IMPORTANTES
 
 ### ⚠️ Restricciones críticas
 - **NO usar localStorage/sessionStorage** en artifacts de Claude (incompatible)
@@ -1037,7 +1123,7 @@ hacienda-app/
 
 ---
 
-## 14. RECURSOS ÚTILES
+## 15. RECURSOS ÚTILES
 
 ### Documentación
 - [Prisma Docs](https://www.prisma.io/docs)
@@ -1057,7 +1143,7 @@ hacienda-app/
 
 ---
 
-## 15. CONTACTO Y SOPORTE
+## 16. CONTACTO Y SOPORTE
 
 ### En caso de dudas sobre el negocio:
 Consultar con el dueño sobre:

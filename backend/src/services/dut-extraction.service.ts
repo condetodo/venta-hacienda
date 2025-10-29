@@ -1,5 +1,6 @@
 import { DUTExtractionResult } from '../../types/dut-extraction';
 const pdfParse = require('pdf-parse');
+const Tesseract = require('tesseract.js');
 
 export const dutExtractionService = {
   // Procesar archivo DUT y extraer datos
@@ -54,25 +55,33 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
 // Extraer texto de imagen usando OCR
 async function extractTextFromImage(buffer: Buffer): Promise<string> {
   try {
-    // TODO: Implementar OCR real (Tesseract.js, Google Vision API, etc.)
-    // Por ahora simulamos la extracción
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    console.log('Iniciando OCR con Tesseract.js en backend...');
+    console.log('Tamaño del buffer:', buffer.length);
     
-    // Texto simulado extraído de imagen
-    return `
-      DUT N° 2024-002
-      Establecimiento: CABO CURIOSO
-      Titular Destino: Frigorífico del Sur S.A.
-      Respa: 67890
-      Fecha Emisión: 25/10/2024
-      Fecha Carga: 25/10/2024
-      Motivo: FAENA
-      Categoría: BORREGO
-      Cantidad: 250
-      Valor DUT: $200.00
-    `;
+    // Configurar Tesseract para español
+    const { data: { text, confidence } } = await Tesseract.recognize(
+      buffer,
+      'spa', // Idioma español
+      {
+        logger: (m: any) => {
+          if (m.status === 'recognizing text') {
+            console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
+          }
+        }
+      }
+    );
+
+    console.log('Texto extraído por OCR:', text);
+    console.log('Confianza:', confidence);
+
+    if (confidence < 30) {
+      console.warn('Baja confianza en el OCR:', confidence);
+    }
+
+    return text;
   } catch (error) {
-    throw new Error('Error al extraer texto de la imagen');
+    console.error('Error en OCR:', error);
+    throw new Error(`Error al extraer texto de la imagen: ${error instanceof Error ? error.message : 'Error desconocido'}`);
   }
 }
 

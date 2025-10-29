@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, FileText, DollarSign, AlertTriangle, Edit, Trash2 } from 'lucide-react';
 import { Venta } from '../types';
 import { ventasService } from '../services/ventas.service';
+import { DocumentosList } from '../components/documentos/DocumentosList';
 
 export const VentaDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -205,35 +206,7 @@ export const VentaDetail: React.FC = () => {
           </div>
 
           {/* Documentos */}
-          <div className="bg-white p-6 rounded-lg shadow">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">Documentos</h3>
-              <button className="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary/90">
-                Subir Documento
-              </button>
-            </div>
-            <div className="space-y-2">
-              {venta.documentos && venta.documentos.length > 0 ? (
-                venta.documentos.map((documento) => (
-                  <div key={documento.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <FileText className="h-5 w-5 text-gray-400" />
-                      <div>
-                        <p className="font-medium text-gray-900">{documento.nombreArchivo}</p>
-                        <p className="text-sm text-gray-500">{formatDate(documento.fechaCarga)}</p>
-                      </div>
-                    </div>
-                    <button className="text-primary hover:text-primary/80">Ver</button>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-4 text-gray-500">
-                  <FileText className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                  <p>No hay documentos cargados</p>
-                </div>
-              )}
-            </div>
-          </div>
+          <DocumentosList ventaId={id!} />
         </div>
 
         {/* Sidebar */}

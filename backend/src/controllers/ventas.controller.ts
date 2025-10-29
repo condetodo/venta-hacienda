@@ -320,6 +320,71 @@ export const ventasController = {
     }
   },
 
+  // Marcar como retirado con datos del remito
+  marcarComoRetirado: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { 
+        numeroRemito,
+        fechaRemito,
+        cliente,
+        transportista,
+        categoria,
+        motivo,
+        cantidadCargada
+      } = req.body;
+
+      // Verificar que la venta existe
+      const existingVenta = await prisma.venta.findUnique({
+        where: { id },
+      });
+
+      if (!existingVenta) {
+        res.status(404).json({
+          error: 'Venta no encontrada',
+          code: 'VENTA_NOT_FOUND',
+        });
+        return;
+      }
+
+      // Validar transición de estado
+      try {
+        await VentasService.validarTransicionEstado(id, 'RETIRADO');
+      } catch (error: any) {
+        res.status(400).json({
+          error: error.message,
+          code: 'INVALID_STATE_TRANSITION',
+        });
+        return;
+      }
+
+      // Preparar datos para actualizar
+      const updateData: any = {
+        estado: 'RETIRADO',
+        cantidadCargada: cantidadCargada || existingVenta.cantidadEnDUT,
+      };
+
+      // Si hay fecha del remito, convertirla y guardarla
+      if (fechaRemito) {
+        updateData.fechaCargaReal = new Date(fechaRemito);
+      }
+
+      // Actualizar venta
+      const venta = await prisma.venta.update({
+        where: { id },
+        data: updateData,
+      });
+
+      res.json({ venta });
+    } catch (error) {
+      console.error('Error en marcarComoRetirado:', error);
+      res.status(500).json({
+        error: 'Error interno del servidor',
+        code: 'INTERNAL_SERVER_ERROR',
+      });
+    }
+  },
+
   // Actualizar estado de venta
   updateEstado: async (req: Request, res: Response): Promise<void> => {
     try {

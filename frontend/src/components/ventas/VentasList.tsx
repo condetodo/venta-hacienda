@@ -84,7 +84,8 @@ export const VentasList: React.FC<VentasListProps> = ({
   const handleNuevaVenta = async (data: any) => {
     try {
       // Crear la venta
-      const ventaCreada = await ventasService.create(data);
+      const response = await ventasService.create(data);
+      const ventaCreada = response.venta;
       console.log('Venta creada:', ventaCreada);
       
       // Si hay un archivo DUT asociado, subirlo

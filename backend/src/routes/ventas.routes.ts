@@ -13,6 +13,7 @@ router.get('/:id', ventasController.getById);
 router.post('/', ventasController.create);
 router.put('/:id', ventasController.update);
 router.delete('/:id', ventasController.delete);
+router.post('/:id/marcar-retirado', ventasController.marcarComoRetirado);
 router.patch('/:id/estado', ventasController.updateEstado);
 
 export { router as ventasRoutes };

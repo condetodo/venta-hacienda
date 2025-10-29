@@ -37,5 +37,11 @@ export const ventasService = {
     const response = await api.patch(`/ventas/${id}/estado`, { estado });
     return response.data;
   },
+
+  // Marcar venta como retirado con datos del remito
+  marcarComoRetirado: async (id: string, datosRemito: any): Promise<{ venta: Venta }> => {
+    const response = await api.post(`/ventas/${id}/marcar-retirado`, datosRemito);
+    return response.data;
+  },
 };
 
