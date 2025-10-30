@@ -4,6 +4,7 @@ import { Venta } from '../types';
 import { VentasList } from '../components/ventas/VentasList';
 import { VentaForm } from '../components/ventas/VentaForm';
 import { CambioEstadoModal } from '../components/ventas/CambioEstadoModal';
+import { RomaneoModal } from '../components/ventas/RomaneoModal';
 import { NotificationModal } from '../components/common/NotificationModal';
 import { ConfirmationModal } from '../components/common/ConfirmationModal';
 import { ToastContainer } from '../components/common/ToastContainer';
@@ -125,6 +126,20 @@ export const Ventas: React.FC = () => {
     }
   };
 
+  const handleRomaneoSuccess = async () => {
+    try {
+      if (!ventaParaCambio) return;
+      const { venta } = await ventasService.updateEstado(ventaParaCambio.id, 'EN_FRIGORIFICO');
+      setRefreshTrigger(prev => prev + 1);
+      setShowCambioEstadoModal(false);
+      setVentaParaCambio(null);
+      showSuccess('Estado actualizado', `La venta ${venta.numeroDUT} pasó a ROMANEO.`);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || error.message || 'Error al cambiar el estado a Romaneo';
+      showErrorToast('Error al actualizar estado', errorMessage);
+    }
+  };
+
   const handleCambioEstadoCancel = () => {
     setShowCambioEstadoModal(false);
     setVentaParaCambio(null);
@@ -161,12 +176,20 @@ export const Ventas: React.FC = () => {
         refreshTrigger={refreshTrigger}
       />
 
-      {/* Modal de Cambio de Estado */}
-      {ventaParaCambio && (
+      {/* Modales de Cambio de Estado */}
+      {ventaParaCambio && ventaParaCambio.estado !== 'RETIRADO' && (
         <CambioEstadoModal
           isOpen={showCambioEstadoModal}
           onClose={handleCambioEstadoCancel}
           onSubmit={handleCambioEstadoSuccess}
+          venta={ventaParaCambio}
+        />
+      )}
+      {ventaParaCambio && ventaParaCambio.estado === 'RETIRADO' && (
+        <RomaneoModal
+          isOpen={showCambioEstadoModal}
+          onClose={handleCambioEstadoCancel}
+          onSubmitted={handleRomaneoSuccess}
           venta={ventaParaCambio}
         />
       )}

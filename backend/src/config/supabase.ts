@@ -13,6 +13,25 @@ export const supabase = createClient(
   }
 );
 
+// Asegurar que el bucket exista (lo crea si falta)
+export const ensureBucketExists = async (bucket: string): Promise<void> => {
+  try {
+    const { data: existing } = await supabase.storage.getBucket(bucket);
+    if (existing) return;
+    // Crear bucket si no existe
+    const { error } = await supabase.storage.createBucket(bucket, {
+      public: true,
+      fileSizeLimit: 10 * 1024 * 1024,
+    });
+    if (error) {
+      throw new Error(`No se pudo crear el bucket '${bucket}': ${error.message}`);
+    }
+  } catch (err) {
+    console.error('Error en ensureBucketExists:', err);
+    throw err;
+  }
+};
+
 // Función para subir archivo a Supabase Storage
 export const uploadFile = async (
   bucket: string,
@@ -21,6 +40,8 @@ export const uploadFile = async (
   mimeType: string
 ): Promise<{ url: string; path: string }> => {
   try {
+    // Garantizar bucket antes de subir
+    await ensureBucketExists(bucket);
     const { data, error } = await supabase.storage
       .from(bucket)
       .upload(path, file, {

@@ -20,11 +20,13 @@ export const documentosService = {
   },
 
   // Subir documentos
-  upload: async (ventaId: string, files: File[], tipo: string = 'files'): Promise<{ documentos: Documento[] }> => {
+  upload: async (ventaId: string, files: File[], tipo: string = 'DUT'): Promise<{ documentos: Documento[] }> => {
     const formData = new FormData();
     files.forEach((file, index) => {
       formData.append('files', file);
     });
+    // Enviar el tipo de documento seleccionado (DUT | REMITO | ROMANEO)
+    formData.append('tipoDocumento', tipo);
 
     const response = await api.post(`/documentos/upload/${ventaId}`, formData, {
       headers: {

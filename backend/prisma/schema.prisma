@@ -35,6 +35,8 @@ model Venta {
   cantidadCargada       Int?        // Cantidad real retirada del campo (ej: 290)
   
   cantidadRomaneo       Int?        // Cantidad recibida en frigorífico (ej: 288)
+  fechaRomaneo          DateTime?
+  tropa                 String?
   
   // === FAENA ===
   totalKgs              Decimal?    @db.Decimal(10, 2) // Kilos totales obtenidos (ej: 8640.00)

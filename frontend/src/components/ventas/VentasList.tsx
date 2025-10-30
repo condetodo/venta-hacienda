@@ -196,6 +196,8 @@ export const VentasList: React.FC<VentasListProps> = ({
     switch (estado) {
       case 'PENDIENTE':
         return 'ABIERTO'; // Mostrar "ABIERTO" para datos existentes con "PENDIENTE"
+      case 'EN_FRIGORIFICO':
+        return 'ROMANEO';
       default:
         return estado;
     }

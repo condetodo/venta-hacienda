@@ -5,10 +5,13 @@ import { upload, handleUploadError } from '../middleware/upload.middleware';
 
 const router = Router();
 
-// Todas las rutas requieren autenticación
+// Endpoint de diagnóstico público (no requiere token)
+router.get('/test-supabase-public', documentosController.testSupabase);
+
+// Todas las rutas siguientes requieren autenticación
 router.use(authenticateToken);
 
-// Rutas de documentos
+// Rutas de documentos (protegidas)
 router.get('/test-supabase', documentosController.testSupabase);
 router.get('/venta/:ventaId', documentosController.getByVenta);
 router.post('/upload/:ventaId', upload.array('files', 5), handleUploadError, documentosController.upload);

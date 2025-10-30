@@ -97,6 +97,8 @@ export interface Venta {
   fechaCargaReal?: string;
   cantidadCargada?: number;
   cantidadRomaneo?: number;
+  fechaRomaneo?: string;
+  tropa?: string;
   numeroRemito?: string;
   
   // === FAENA ===
@@ -225,6 +227,8 @@ export interface VentaFormData {
   fechaCargaReal?: string;
   cantidadCargada?: number;
   cantidadRomaneo?: number;
+  fechaRomaneo?: string;
+  tropa?: string;
   numeroRemito?: string;
   
   // === FAENA ===

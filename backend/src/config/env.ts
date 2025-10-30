@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import dotenv from 'dotenv';
+
+// Cargar variables de entorno lo antes posible
+// 1) .env.local (prioridad en desarrollo)
+dotenv.config({ path: './.env.local' });
+// 2) .env (fallback)
+dotenv.config();
 
 // Schema de validación para variables de entorno
 const envSchema = z.object({

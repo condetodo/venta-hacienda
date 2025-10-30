@@ -12,6 +12,29 @@ export const documentosController = {
       console.log('SUPABASE_SERVICE_KEY:', env.SUPABASE_SERVICE_KEY ? 'Presente' : 'Ausente');
       console.log('SUPABASE_STORAGE_BUCKET:', env.SUPABASE_STORAGE_BUCKET);
       
+      // Diagnóstico: validar token y coincidencia de ref
+      const serviceKey = env.SUPABASE_SERVICE_KEY;
+      let decodedPayload: any = null;
+      let tokenDiagnostics: any = {};
+      try {
+        const parts = serviceKey.split('.');
+        if (parts.length === 3) {
+          const payload = Buffer.from(parts[1], 'base64url').toString('utf8');
+          decodedPayload = JSON.parse(payload);
+          tokenDiagnostics = {
+            keyLength: serviceKey.length,
+            hasBearerPrefix: serviceKey.startsWith('Bearer '),
+            payloadRole: decodedPayload?.role,
+            payloadRef: decodedPayload?.ref,
+            urlRefMatches: typeof decodedPayload?.ref === 'string' && env.SUPABASE_URL.includes(decodedPayload.ref),
+          };
+        } else {
+          tokenDiagnostics = { error: 'Formato JWT inválido (no tiene 3 partes)' };
+        }
+      } catch (e: any) {
+        tokenDiagnostics = { error: 'No se pudo decodificar la SERVICE_KEY', details: e?.message };
+      }
+
       // Intentar listar buckets
       const { data: buckets, error } = await supabase.storage.listBuckets();
       
@@ -20,6 +43,7 @@ export const documentosController = {
         res.status(500).json({
           error: 'Error conectando con Supabase',
           details: error.message,
+          diagnostics: tokenDiagnostics,
         });
         return;
       }
@@ -30,6 +54,7 @@ export const documentosController = {
         message: 'Configuración de Supabase OK',
         buckets: buckets.map(b => b.name),
         bucketTarget: env.SUPABASE_STORAGE_BUCKET,
+        diagnostics: tokenDiagnostics,
       });
     } catch (error) {
       console.error('Error en testSupabase:', error);
@@ -69,6 +94,14 @@ export const documentosController = {
       console.log('Body:', req.body);
       
       const { ventaId } = req.params;
+      const tipoDocumentoRaw = (req.body?.tipoDocumento || '').toString().toUpperCase();
+      const allowedTipos = ['DUT', 'REMITO', 'ROMANEO'];
+      // Mapear a enum de Prisma cuando sea necesario
+      const tipoToEnum = (tipo: string): 'DUT' | 'REMITO_CAMPO' | 'ROMANEO' => {
+        if (tipo === 'REMITO') return 'REMITO_CAMPO';
+        if (tipo === 'ROMANEO') return 'ROMANEO';
+        return 'DUT';
+      };
       const files = req.files as Express.Multer.File[];
 
       if (!files || files.length === 0) {
@@ -76,6 +109,14 @@ export const documentosController = {
         res.status(400).json({
           error: 'No se proporcionaron archivos',
           code: 'NO_FILES',
+        });
+        return;
+      }
+
+      if (!allowedTipos.includes(tipoDocumentoRaw)) {
+        res.status(400).json({
+          error: 'Tipo de documento inválido. Use DUT, REMITO o ROMANEO',
+          code: 'INVALID_DOCUMENT_TYPE',
         });
         return;
       }
@@ -105,7 +146,7 @@ export const documentosController = {
         // Generar nombre único para el archivo
         const timestamp = Date.now();
         const extension = file.originalname.split('.').pop();
-        const fileName = `${file.fieldname}_${timestamp}.${extension}`;
+        const fileName = `${tipoToEnum(tipoDocumentoRaw)}_${timestamp}.${extension}`;
         const path = `ventas/${ventaId}/${fileName}`;
 
         console.log('Subiendo archivo a Supabase...');
@@ -129,7 +170,7 @@ export const documentosController = {
         const documento = await prisma.documento.create({
           data: {
             ventaId,
-            tipo: file.fieldname as any, // El tipo viene del campo del formulario
+            tipo: tipoToEnum(tipoDocumentoRaw) as any,
             nombreArchivo: file.originalname,
             url,
             mimeType: file.mimetype,
@@ -145,11 +186,14 @@ export const documentosController = {
         message: `${documentosSubidos.length} documento(s) subido(s) exitosamente`,
         documentos: documentosSubidos,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error en upload documentos:', error);
+      const message = error?.message || 'Error interno del servidor';
+      const details = error?.cause?.message || error?.stack || undefined;
       res.status(500).json({
-        error: 'Error interno del servidor',
+        error: message,
         code: 'INTERNAL_SERVER_ERROR',
+        details,
       });
     }
   },

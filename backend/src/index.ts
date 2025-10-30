@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import { errorHandler } from './middleware/error.middleware';
 import { authRoutes } from './routes/auth.routes';
 import { ventasRoutes } from './routes/ventas.routes';
@@ -11,8 +10,7 @@ import { dolarRoutes } from './routes/dolar.routes';
 import dutRoutes from './routes/dut.routes';
 import { env } from './config/env';
 
-// Cargar variables de entorno
-dotenv.config({ path: './.env.local' });
+// Carga de env ahora se realiza en config/env.ts para asegurar orden correcto
 
 const app = express();
 const PORT = env.PORT;

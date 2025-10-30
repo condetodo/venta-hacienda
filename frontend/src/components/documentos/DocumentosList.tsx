@@ -15,6 +15,7 @@ export const DocumentosList: React.FC<DocumentosListProps> = ({
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [selectedTipo, setSelectedTipo] = useState<'DUT' | 'REMITO' | 'ROMANEO' | ''>('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const { showSuccess, showError } = useToast();
 
@@ -39,10 +40,16 @@ export const DocumentosList: React.FC<DocumentosListProps> = ({
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
+    if (!selectedTipo) {
+      showError('Tipo requerido', 'Selecciona el tipo de documento (DUT, Remito o Romaneo)');
+      event.target.value = '';
+      return;
+    }
+
     try {
       setUploading(true);
       const fileArray = Array.from(files);
-      const { documentos: nuevosDocumentos } = await documentosService.upload(ventaId, fileArray);
+      const { documentos: nuevosDocumentos } = await documentosService.upload(ventaId, fileArray, selectedTipo);
       
       setDocumentos(prev => [...prev, ...nuevosDocumentos]);
       showSuccess('Documentos subidos', `${nuevosDocumentos.length} documento(s) subido(s) exitosamente`);
@@ -52,6 +59,9 @@ export const DocumentosList: React.FC<DocumentosListProps> = ({
       }
     } catch (error: any) {
       console.error('Error subiendo documentos:', error);
+      if (error?.response?.data) {
+        console.error('Respuesta del servidor:', error.response.data);
+      }
       const errorMessage = error.response?.data?.error || 'Error al subir documentos';
       showError('Error', errorMessage);
     } finally {
@@ -102,6 +112,7 @@ export const DocumentosList: React.FC<DocumentosListProps> = ({
     switch (tipo) {
       case 'DUT':
         return '📄';
+      case 'REMITO':
       case 'REMITO_CAMPO':
         return '📋';
       case 'ROMANEO':
@@ -121,6 +132,7 @@ export const DocumentosList: React.FC<DocumentosListProps> = ({
     switch (tipo) {
       case 'DUT':
         return 'DUT';
+      case 'REMITO':
       case 'REMITO_CAMPO':
         return 'Remito de Campo';
       case 'ROMANEO':
@@ -173,6 +185,22 @@ export const DocumentosList: React.FC<DocumentosListProps> = ({
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-semibold text-gray-900">Documentos</h3>
         <div className="flex items-center space-x-2">
+          {/** Estado para habilitar/deshabilitar subida */}
+          {/** Accesible: aria-label y title explicativo cuando está deshabilitado */}
+          <label htmlFor="tipo-documento" className="sr-only">Tipo de documento</label>
+          <select
+            id="tipo-documento"
+            aria-label="Seleccionar tipo de documento"
+            className="h-10 rounded-md border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+            value={selectedTipo}
+            onChange={(e) => setSelectedTipo(e.target.value as any)}
+            disabled={uploading}
+          >
+            <option value="" disabled>Seleccionar tipo</option>
+            <option value="DUT">DUT</option>
+            <option value="REMITO">Remito</option>
+            <option value="ROMANEO">Romaneo</option>
+          </select>
           <input
             type="file"
             id="document-upload"
@@ -180,19 +208,27 @@ export const DocumentosList: React.FC<DocumentosListProps> = ({
             accept=".pdf,.jpg,.jpeg,.png"
             onChange={handleFileUpload}
             className="hidden"
-            disabled={uploading}
+            disabled={uploading || !selectedTipo}
           />
           <label
             htmlFor="document-upload"
-            className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed ${
-              uploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ${
+              uploading || !selectedTipo ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'
             }`}
+            aria-disabled={uploading || !selectedTipo}
+            title={!selectedTipo ? 'Seleccioná el tipo de documento para habilitar la subida' : undefined}
           >
             <Upload className="h-4 w-4 mr-2" />
             {uploading ? 'Subiendo...' : 'Subir Documento'}
           </label>
         </div>
       </div>
+
+      {!selectedTipo && (
+        <p className="text-xs text-gray-500 mb-4" role="note">
+          Para subir archivos, primero seleccioná el tipo de documento (DUT, Remito o Romaneo).
+        </p>
+      )}
 
       {documentos.length === 0 ? (
         <div className="text-center py-8">
