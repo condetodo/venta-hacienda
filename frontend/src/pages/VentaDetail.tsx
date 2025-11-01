@@ -65,7 +65,8 @@ export const VentaDetail: React.FC = () => {
       case 'RETIRADO':
         return 'bg-orange-100 text-orange-800';
       case 'ROMANEO':
-        return 'bg-purple-100 text-purple-800';
+      case 'EN_FRIGORIFICO': // Estado real en la base de datos
+        return 'bg-violet-200 text-violet-900';
       case 'FINALIZADO':
         return 'bg-green-100 text-green-800';
       default:
@@ -77,6 +78,8 @@ export const VentaDetail: React.FC = () => {
     switch (estado) {
       case 'PENDIENTE':
         return 'ABIERTO'; // Mostrar "ABIERTO" para datos existentes con "PENDIENTE"
+      case 'EN_FRIGORIFICO':
+        return 'ROMANEO';
       default:
         return estado;
     }

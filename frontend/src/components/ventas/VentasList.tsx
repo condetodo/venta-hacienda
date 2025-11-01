@@ -184,7 +184,8 @@ export const VentasList: React.FC<VentasListProps> = ({
       case 'RETIRADO':
         return 'bg-orange-100 text-orange-800';
       case 'ROMANEO':
-        return 'bg-purple-100 text-purple-800';
+      case 'EN_FRIGORIFICO': // Estado real en la base de datos
+        return 'bg-violet-200 text-violet-900';
       case 'FINALIZADO':
         return 'bg-green-100 text-green-800';
       default:
@@ -403,13 +404,15 @@ export const VentasList: React.FC<VentasListProps> = ({
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">
-                          <button
-                            onClick={() => onChangeEstado?.(venta)}
-                            className="text-green-600 hover:text-green-800"
-                            title="Cambiar estado"
-                          >
-                            <ArrowRight className="h-4 w-4" />
-                          </button>
+                          {venta.estado !== 'ROMANEO' && venta.estado !== 'EN_FRIGORIFICO' && (
+                            <button
+                              onClick={() => onChangeEstado?.(venta)}
+                              className="text-green-600 hover:text-green-800"
+                              title="Cambiar estado"
+                            >
+                              <ArrowRight className="h-4 w-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => onViewVenta?.(venta)}
                             className="text-primary hover:text-primary/80"
