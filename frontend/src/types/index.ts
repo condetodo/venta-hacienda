@@ -204,6 +204,13 @@ export interface Configuracion {
   updatedAt: string;
 }
 
+export interface CotizacionDolar {
+  tipo: string;
+  compra: number;
+  venta: number;
+  fecha: string;
+}
+
 // ============================================
 // INTERFACES PARA FORMULARIOS
 // ============================================
