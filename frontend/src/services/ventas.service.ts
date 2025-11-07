@@ -43,5 +43,14 @@ export const ventasService = {
     const response = await api.post(`/ventas/${id}/marcar-retirado`, datosRemito);
     return response.data;
   },
+
+  // Asignar precio por kilo a una venta (sin crear pago)
+  asignarPrecioPorKilo: async (
+    id: string,
+    data: { precioPorKilo: number; moneda: 'ARS' | 'USD'; tipoCambio?: number; sinFacturar?: boolean }
+  ): Promise<{ venta: Venta }> => {
+    const response = await api.post(`/ventas/${id}/asignar-precio`, data);
+    return response.data;
+  },
 };
 

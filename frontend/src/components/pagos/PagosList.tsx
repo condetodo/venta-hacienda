@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Eye, DollarSign, Calendar, AlertCircle } from 'lucide-react';
+import { Search, Filter, Eye, DollarSign, Calendar, AlertCircle, Tag } from 'lucide-react';
 import { Venta } from '../../types';
 import { ventasService } from '../../services/ventas.service';
 import { RegistrarPagoModal } from './RegistrarPagoModal';
+import { AsignarPrecioModal } from './AsignarPrecioModal';
 import { HistorialPagosModal } from './HistorialPagosModal';
 
 interface PagosListProps {
@@ -29,6 +30,8 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
   });
   const [showRegistrarPago, setShowRegistrarPago] = useState(false);
   const [ventaParaPago, setVentaParaPago] = useState<Venta | null>(null);
+  const [showAsignarPrecio, setShowAsignarPrecio] = useState(false);
+  const [ventaParaPrecio, setVentaParaPrecio] = useState<Venta | null>(null);
   const [showHistorial, setShowHistorial] = useState(false);
   const [ventaParaHistorial, setVentaParaHistorial] = useState<Venta | null>(null);
 
@@ -143,6 +146,11 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
     setShowRegistrarPago(true);
   };
 
+  const handleAsignarPrecio = (venta: Venta) => {
+    setVentaParaPrecio(venta);
+    setShowAsignarPrecio(true);
+  };
+
   const handleVerHistorial = (venta: Venta) => {
     setVentaParaHistorial(venta);
     setShowHistorial(true);
@@ -152,6 +160,14 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
     fetchVentas();
     setShowRegistrarPago(false);
     setVentaParaPago(null);
+    // Forzar refresh del componente padre
+    window.dispatchEvent(new CustomEvent('pagoRegistrado'));
+  };
+
+  const handlePrecioAsignado = () => {
+    fetchVentas();
+    setShowAsignarPrecio(false);
+    setVentaParaPrecio(null);
     // Forzar refresh del componente padre
     window.dispatchEvent(new CustomEvent('pagoRegistrado'));
   };
@@ -220,8 +236,8 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
 
   return (
     <div className="space-y-6">
-      {/* Header con búsqueda y filtros */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+      {/* Header con búsqueda */}
+      <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0">
         <div className="flex-1 max-w-lg">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -233,16 +249,6 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
             />
           </div>
-        </div>
-
-        <div className="flex space-x-2">
-          <button
-            onClick={() => setShowRegistrarPago(true)}
-            className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-md hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Registrar Pago</span>
-          </button>
         </div>
       </div>
 
@@ -329,7 +335,7 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
                     Cliente
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total a Pagar
+                    Total a Cobrar
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Pagado
@@ -407,6 +413,15 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">
+                          {!tienePrecio && (
+                            <button
+                              onClick={() => handleAsignarPrecio(venta)}
+                              className="text-orange-600 hover:text-orange-800"
+                              title="Asignar precio por kilo"
+                            >
+                              <Tag className="h-4 w-4" />
+                            </button>
+                          )}
                           {tienePrecio && saldoPendiente > 0 && (
                             <button
                               onClick={() => handleRegistrarPago(venta)}
@@ -437,6 +452,16 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
       </div>
 
       {/* Modales */}
+      <AsignarPrecioModal
+        isOpen={showAsignarPrecio}
+        onClose={() => {
+          setShowAsignarPrecio(false);
+          setVentaParaPrecio(null);
+        }}
+        onSuccess={handlePrecioAsignado}
+        ventaSeleccionada={ventaParaPrecio || undefined}
+      />
+
       <RegistrarPagoModal
         isOpen={showRegistrarPago}
         onClose={() => {

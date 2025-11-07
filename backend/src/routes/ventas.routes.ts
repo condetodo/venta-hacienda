@@ -15,6 +15,7 @@ router.put('/:id', ventasController.update);
 router.delete('/:id', ventasController.delete);
 router.post('/:id/marcar-retirado', ventasController.marcarComoRetirado);
 router.patch('/:id/estado', ventasController.updateEstado);
+router.post('/:id/asignar-precio', ventasController.asignarPrecioPorKilo);
 
 export { router as ventasRoutes };
 

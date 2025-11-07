@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { X, Search } from 'lucide-react';
@@ -10,11 +10,13 @@ import { dolarService } from '../../services/dolar.service';
 
 const pagoSchema = z.object({
   ventaId: z.string().min(1, 'Debe seleccionar una venta'),
-  precioPorKilo: z.number().min(0.01, 'El precio por kilo debe ser mayor a 0'),
+  monto: z.number().min(0.01, 'El monto debe ser mayor a 0'),
   moneda: z.nativeEnum(Moneda),
   tipoCambio: z.number().optional(),
   fecha: z.string().min(1, 'La fecha es requerida'),
   formaPago: z.nativeEnum(FormaPago),
+  referencia: z.string().optional(),
+  dondeSeAcredita: z.string().optional(),
   observaciones: z.string().optional(),
 }).refine((data) => {
   if (data.moneda === Moneda.USD && !data.tipoCambio) {
@@ -48,7 +50,6 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
   const [busquedaVenta, setBusquedaVenta] = useState('');
   const [mostrarBusqueda, setMostrarBusqueda] = useState(!ventaSeleccionada);
   const [tipoCambioActual, setTipoCambioActual] = useState<number | null>(null);
-  const [montoCalculado, setMontoCalculado] = useState<number | null>(null);
   const [montoEnARS, setMontoEnARS] = useState<number | null>(null);
 
   const {
@@ -58,6 +59,7 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
     reset,
     watch,
     setValue,
+    control,
   } = useForm<PagoFormSchema>({
     resolver: zodResolver(pagoSchema),
     defaultValues: {
@@ -67,7 +69,7 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
   });
 
   const moneda = watch('moneda');
-  const precioPorKilo = watch('precioPorKilo');
+  const monto = watch('monto');
   const tipoCambio = watch('tipoCambio');
 
   useEffect(() => {
@@ -86,23 +88,14 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
     }
   }, [isOpen, ventaSeleccionada]);
 
-  // Calcular monto automáticamente: precioPorKilo × totalKgs
+  // Calcular monto en ARS si es USD
   useEffect(() => {
-    if (ventaSeleccionadaState && precioPorKilo && ventaSeleccionadaState.totalKgs) {
-      const monto = precioPorKilo * ventaSeleccionadaState.totalKgs;
-      setMontoCalculado(monto);
-      
-      // Si es USD, calcular en ARS también
-      if (moneda === Moneda.USD && tipoCambio) {
-        setMontoEnARS(monto * tipoCambio);
-      } else {
-        setMontoEnARS(null);
-      }
+    if (monto && moneda === Moneda.USD && tipoCambio) {
+      setMontoEnARS(monto * tipoCambio);
     } else {
-      setMontoCalculado(null);
       setMontoEnARS(null);
     }
-  }, [precioPorKilo, ventaSeleccionadaState, moneda, tipoCambio]);
+  }, [monto, moneda, tipoCambio]);
 
   const calcularFechaPago = (venta: Venta) => {
     // Si tiene fechaRomaneo, usar esa fecha + 30 días
@@ -128,10 +121,11 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
   const fetchVentas = async () => {
     try {
       const response = await ventasService.getAll({ limit: 1000 });
-      console.log('Ventas cargadas:', response.ventas.length);
-      // Mostrar TODAS las ventas (sin filtrar por romaneo aquí)
-      // El filtro de romaneo se aplicará solo al seleccionar
-      setVentas(response.ventas);
+      // Filtrar solo ventas con precio acordado
+      const ventasConPrecio = response.ventas.filter(
+        (venta) => venta.totalAPagar && venta.totalAPagar > 0
+      );
+      setVentas(ventasConPrecio);
     } catch (error) {
       console.error('Error al cargar ventas:', error);
     }
@@ -162,11 +156,9 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
   });
 
   const handleSeleccionarVenta = (venta: Venta) => {
-    // Verificar que tenga kilos de romaneo (lo más importante)
-    // Si tiene totalKgs, consideramos que el romaneo está completo
-    // La fecha puede calcularse si no existe
-    if (!venta.totalKgs) {
-      alert('Esta venta no tiene kilos de romaneo registrados. Debe cargar el romaneo primero.');
+    // Verificar que tenga precio acordado
+    if (!venta.totalAPagar || venta.totalAPagar === 0) {
+      alert('Esta venta no tiene precio acordado. Debe asignar el precio por kilo primero.');
       return;
     }
     
@@ -175,11 +167,6 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
     setMostrarBusqueda(false);
     setBusquedaVenta('');
     calcularFechaPago(venta);
-    
-    // Si la venta ya tiene precioKg, prellenar el campo
-    if (venta.precioKg) {
-      setValue('precioPorKilo', venta.precioKg);
-    }
     
     // Si la venta tiene tipoCambio, prellenar
     if (venta.tipoCambio) {
@@ -199,35 +186,31 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
         return;
       }
 
-      if (!ventaSeleccionadaState.totalKgs) {
-        alert('La venta seleccionada no tiene kilos de romaneo registrados');
+      if (!ventaSeleccionadaState.totalAPagar || ventaSeleccionadaState.totalAPagar === 0) {
+        alert('La venta seleccionada no tiene precio acordado. Debe asignar el precio por kilo primero.');
         return;
       }
 
-      // Calcular monto total: precioPorKilo × totalKgs
-      const montoTotal = data.precioPorKilo * ventaSeleccionadaState.totalKgs;
+      // Validar que el monto no exceda el saldo pendiente
+      const saldoPendiente = ventaSeleccionadaState.totalAPagar - (ventaSeleccionadaState.totalPagado || 0);
+      const montoPago = data.moneda === Moneda.USD && data.tipoCambio 
+        ? data.monto * data.tipoCambio 
+        : data.monto;
 
-      // Si la venta ya tiene un totalAPagar calculado, validar que el monto no exceda el saldo pendiente
-      // Pero si no tiene precio acordado aún, no validar (es el primer pago)
-      if (ventaSeleccionadaState.totalAPagar && ventaSeleccionadaState.totalAPagar > 0) {
-        const saldoPendiente = ventaSeleccionadaState.totalAPagar - (ventaSeleccionadaState.totalPagado || 0);
-        const montoPago = data.moneda === Moneda.USD && data.tipoCambio 
-          ? montoTotal * data.tipoCambio 
-          : montoTotal;
-
-        if (montoPago > saldoPendiente) {
-          alert(`El monto del pago (${formatCurrency(montoPago)}) excede el saldo pendiente (${formatCurrency(saldoPendiente)})`);
-          return;
-        }
+      if (montoPago > saldoPendiente) {
+        alert(`El monto del pago (${formatCurrency(montoPago)}) excede el saldo pendiente (${formatCurrency(saldoPendiente)})`);
+        return;
       }
 
       const pagoData: PagoFormData = {
         ventaId: ventaSeleccionadaState.id,
-        monto: montoTotal, // Guardar el monto calculado
+        monto: data.monto,
         moneda: data.moneda,
         tipoCambio: data.tipoCambio,
         fecha: data.fecha,
         formaPago: data.formaPago,
+        referencia: data.referencia,
+        dondeSeAcredita: data.dondeSeAcredita,
         observaciones: data.observaciones,
       };
 
@@ -236,7 +219,6 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
       reset();
       setVentaSeleccionadaState(null);
       setBusquedaVenta('');
-      setMontoCalculado(null);
       setMontoEnARS(null);
       onSuccess();
       onClose();
@@ -256,6 +238,29 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
+  };
+
+  const formatCurrencyInput = (amount: number | undefined, currency: Moneda): string => {
+    if (amount === null || amount === undefined || isNaN(amount)) {
+      return '';
+    }
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: currency === Moneda.USD ? 'USD' : 'ARS',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const parseCurrencyInput = (value: string): number | undefined => {
+    // Remover símbolos de moneda, espacios y caracteres no numéricos (excepto punto y coma)
+    const cleaned = value
+      .replace(/[^\d,.-]/g, '')
+      .replace(/\./g, '') // Remover puntos (separadores de miles)
+      .replace(',', '.'); // Convertir coma a punto decimal
+    
+    const numericValue = parseFloat(cleaned);
+    return isNaN(numericValue) ? undefined : numericValue;
   };
 
   const saldoPendiente = ventaSeleccionadaState
@@ -309,11 +314,7 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
                           <div className="font-medium text-gray-900">{venta.numeroDUT}</div>
                           <div className="text-sm text-gray-500">{venta.titularDestino}</div>
                           <div className="text-xs text-gray-400">
-                            Kgs: {venta.totalKgs || '-'} | Saldo: {
-                              venta.totalAPagar && venta.totalAPagar > 0
-                                ? formatCurrency(venta.totalAPagar - (venta.totalPagado || 0))
-                                : 'Precio pendiente'
-                            }
+                            Kgs: {venta.totalKgs || '-'} | Saldo: {formatCurrency((venta.totalAPagar || 0) - (venta.totalPagado || 0))}
                           </div>
                         </button>
                       ))
@@ -330,15 +331,9 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
                     <div className="font-medium text-gray-900">{ventaSeleccionadaState?.numeroDUT}</div>
                     <div className="text-sm text-gray-500">{ventaSeleccionadaState?.titularDestino}</div>
                     <div className="text-sm text-gray-600 mt-1">
-                      {ventaSeleccionadaState?.totalAPagar && ventaSeleccionadaState.totalAPagar > 0 ? (
-                        <>
-                          Total: {formatCurrency(ventaSeleccionadaState.totalAPagar)} | 
-                          Pagado: {formatCurrency(ventaSeleccionadaState.totalPagado || 0)} | 
-                          Pendiente: {formatCurrency(saldoPendiente)}
-                        </>
-                      ) : (
-                        <span className="text-orange-600">Precio pendiente - Se acordará en este pago</span>
-                      )}
+                      Total: {formatCurrency(ventaSeleccionadaState?.totalAPagar || 0)} | 
+                      Pagado: {formatCurrency(ventaSeleccionadaState?.totalPagado || 0)} | 
+                      Pendiente: {formatCurrency(saldoPendiente)}
                     </div>
                     {ventaSeleccionadaState?.totalKgs && (
                       <div className="text-sm text-gray-600 mt-1">
@@ -366,25 +361,49 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
             )}
           </div>
 
-          {/* Precio por Kilo y Moneda */}
+          {/* Monto y Moneda */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Precio por Kilo <span className="text-red-500">*</span>
+                Monto del Pago <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                step="0.01"
-                {...register('precioPorKilo', { valueAsNumber: true })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
+              <Controller
+                name="monto"
+                control={control}
+                render={({ field }) => (
+                  <input
+                    type="text"
+                    {...field}
+                    value={field.value !== null && field.value !== undefined ? formatCurrencyInput(field.value, moneda) : ''}
+                    onChange={(e) => {
+                      const numericValue = parseCurrencyInput(e.target.value);
+                      field.onChange(numericValue);
+                    }}
+                    onBlur={field.onBlur}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
+                    placeholder="Ingrese el monto..."
+                  />
+                )}
               />
-              {errors.precioPorKilo && (
-                <p className="mt-1 text-sm text-red-600">{errors.precioPorKilo.message}</p>
+              {errors.monto && (
+                <p className="mt-1 text-sm text-red-600">{errors.monto.message}</p>
               )}
-              {montoCalculado && ventaSeleccionadaState?.totalKgs && (
-                <p className="mt-1 text-sm text-gray-600">
-                  Monto total: {formatCurrency(montoCalculado)} ({precioPorKilo?.toFixed(2)} × {ventaSeleccionadaState.totalKgs.toLocaleString('es-AR')} kg)
-                </p>
+              {ventaSeleccionadaState && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Si es USD, necesitamos convertir el saldo pendiente a USD
+                    if (moneda === Moneda.USD && tipoCambio) {
+                      setValue('monto', saldoPendiente / tipoCambio);
+                    } else {
+                      setValue('monto', saldoPendiente);
+                    }
+                  }}
+                  className="mt-1 text-xs text-primary hover:text-primary/80 hover:underline cursor-pointer"
+                  title="Hacer clic para autocompletar con el saldo pendiente"
+                >
+                  Saldo pendiente: {formatCurrency(saldoPendiente)}
+                </button>
               )}
             </div>
 
@@ -438,7 +457,6 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Fecha de Pago <span className="text-red-500">*</span>
-                <span className="text-xs text-gray-500 ml-2">(Calculada automáticamente: 30 días después del romaneo)</span>
               </label>
               <input
                 type="date"
@@ -470,6 +488,33 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
             </div>
           </div>
 
+          {/* Referencia y Donde se Acredita */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Referencia
+              </label>
+              <input
+                type="text"
+                {...register('referencia')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
+                placeholder="Número de referencia del pago..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Donde se Acredita
+              </label>
+              <input
+                type="text"
+                {...register('dondeSeAcredita')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
+                placeholder="Banco o cuenta donde se acredita..."
+              />
+            </div>
+          </div>
+
           {/* Observaciones */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -484,16 +529,19 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
           </div>
 
           {/* Resumen del pago */}
-          {montoCalculado && (
+          {monto && ventaSeleccionadaState && !isNaN(monto) && (
             <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
               <h3 className="text-sm font-medium text-blue-900 mb-2">Resumen del Pago</h3>
               <div className="space-y-1 text-sm text-blue-800">
-                <div>Precio por kilo: {formatCurrency(precioPorKilo || 0)}</div>
-                <div>Kilos: {ventaSeleccionadaState?.totalKgs?.toLocaleString('es-AR')} kg</div>
-                <div className="font-semibold">Monto total: {formatCurrency(montoCalculado)}</div>
-                {moneda === Moneda.USD && montoEnARS && (
+                <div className="font-semibold">Monto: {formatCurrency(monto)} {moneda}</div>
+                {moneda === Moneda.USD && montoEnARS && !isNaN(montoEnARS) && (
                   <div>Equivale a: {formatCurrency(montoEnARS)} ARS</div>
                 )}
+                <div className="mt-2 pt-2 border-t border-blue-300">
+                  <div>Total a pagar: {formatCurrency(ventaSeleccionadaState.totalAPagar || 0)}</div>
+                  <div>Ya pagado: {formatCurrency(ventaSeleccionadaState.totalPagado || 0)}</div>
+                  <div className="font-semibold">Saldo pendiente: {formatCurrency(saldoPendiente)}</div>
+                </div>
               </div>
             </div>
           )}
@@ -509,7 +557,7 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !montoCalculado}
+              disabled={isSubmitting || !monto}
               className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 disabled:opacity-50"
             >
               {isSubmitting ? 'Registrando...' : 'Registrar Pago'}

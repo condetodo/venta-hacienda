@@ -91,55 +91,19 @@ export const pagosController = {
 
       const totalPagadoDecimal = totalPagado._sum.monto || new Decimal(0);
 
-      // Si la venta no tiene precio acordado aún (no tiene totalAPagar), calcularlo
-      // El precio por kilo viene en el pago (monto / totalKgs)
+      // Actualizar solo el totalPagado
+      // NO calcular precio si ya existe (eso se hace con asignarPrecioPorKilo)
       const updateData: any = {
         totalPagado: totalPagadoDecimal.toNumber(),
       };
 
-      // Si no tiene totalAPagar, calcularlo basado en el precio del pago
-      // El monto del pago es: precioPorKilo × totalKgs
-      // Entonces el totalAPagar debería ser ese monto + IVA - descuentos
+      // Validar que la venta tenga precio acordado antes de registrar pago
       if (!venta.totalAPagar || venta.totalAPagar.equals(0)) {
-        if (venta.totalKgs) {
-          // El monto del pago ya es precioPorKilo × totalKgs
-          // Calcular precio por kilo del pago
-          const precioPorKilo = new Decimal(pagoData.monto).div(venta.totalKgs);
-          
-          // Si es USD, convertir a ARS para calcular totalAPagar
-          let montoEnARS = new Decimal(pagoData.monto);
-          if (pagoData.moneda === 'USD' && pagoData.tipoCambio) {
-            montoEnARS = new Decimal(pagoData.monto).mul(pagoData.tipoCambio);
-          }
-
-          // Actualizar precioKg (convertir a número para Prisma)
-          updateData.precioKg = precioPorKilo.toNumber();
-          
-          // Calcular totalAPagar: monto × (1 + IVA/100) - retenciones - valorDUT - valorGuia
-          // El montoEnARS es el importe neto (precio × kilos)
-          const importeNeto = montoEnARS;
-          const totalOperacion = importeNeto.mul(new Decimal(1).add(venta.iva.div(100)));
-          const descuentos = (venta.retencion || new Decimal(0))
-            .add(venta.valorDUT || new Decimal(0))
-            .add(venta.valorGuia || new Decimal(0));
-          
-          // Convertir a números para Prisma
-          updateData.totalAPagar = totalOperacion.sub(descuentos).toNumber();
-          updateData.importeNeto = importeNeto.toNumber();
-          updateData.totalOperacion = totalOperacion.toNumber();
-          
-          // Si es USD, también actualizar importeEnUSD y tipoCambio
-          if (pagoData.moneda === 'USD') {
-            updateData.importeEnUSD = new Decimal(pagoData.monto).toNumber();
-            if (pagoData.tipoCambio) {
-              updateData.tipoCambio = new Decimal(pagoData.tipoCambio).toNumber();
-              updateData.importeOriginal = montoEnARS.toNumber();
-            }
-          } else {
-            // Si es ARS, el importeOriginal es el mismo monto
-            updateData.importeOriginal = montoEnARS.toNumber();
-          }
-        }
+        res.status(400).json({
+          error: 'La venta no tiene precio acordado. Debe asignar el precio por kilo primero.',
+          code: 'PRECIO_NO_ASIGNADO',
+        });
+        return;
       }
 
       // Actualizar venta

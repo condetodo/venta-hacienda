@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/database';
 import { VentasService } from '../services/ventas.service';
+import { Decimal } from 'decimal.js';
 
 export const ventasController = {
   // Obtener todas las ventas con paginación y filtros
@@ -467,6 +468,112 @@ export const ventasController = {
       console.error('Error en calcularImportes:', error);
       res.status(500).json({
         error: 'Error interno del servidor',
+        code: 'INTERNAL_SERVER_ERROR',
+      });
+    }
+  },
+
+  // Asignar precio por kilo a una venta (sin crear pago)
+  asignarPrecioPorKilo: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { precioPorKilo, moneda, tipoCambio, sinFacturar } = req.body;
+
+      // Validaciones
+      if (!precioPorKilo || precioPorKilo <= 0) {
+        res.status(400).json({
+          error: 'El precio por kilo debe ser mayor a 0',
+          code: 'INVALID_PRECIO',
+        });
+        return;
+      }
+
+      // Verificar que la venta existe
+      const venta = await prisma.venta.findUnique({
+        where: { id },
+      });
+
+      if (!venta) {
+        res.status(404).json({
+          error: 'Venta no encontrada',
+          code: 'VENTA_NOT_FOUND',
+        });
+        return;
+      }
+
+      // Verificar que la venta tenga kilos de romaneo
+      if (!venta.totalKgs || venta.totalKgs.equals(0)) {
+        res.status(400).json({
+          error: 'La venta no tiene kilos de romaneo registrados',
+          code: 'NO_TOTAL_KGS',
+        });
+        return;
+      }
+
+      // Verificar que no tenga precio acordado ya
+      if (venta.totalAPagar && venta.totalAPagar.greaterThan(0)) {
+        res.status(400).json({
+          error: 'La venta ya tiene un precio acordado. Use la opción de actualizar venta si desea modificarlo.',
+          code: 'PRECIO_YA_ASIGNADO',
+        });
+        return;
+      }
+
+      // Calcular monto total: precioPorKilo × totalKgs
+      const montoTotal = new Decimal(precioPorKilo).mul(venta.totalKgs);
+
+      // Si es USD, convertir a ARS para calcular totalAPagar
+      let montoEnARS = montoTotal;
+      if (moneda === 'USD' && tipoCambio) {
+        montoEnARS = montoTotal.mul(tipoCambio);
+      }
+
+      // Calcular totalAPagar según si tiene factura o no
+      const importeNeto = montoEnARS;
+      
+      // Si sinFacturar es true, no se suma IVA
+      // Si sinFacturar es false (o undefined), se suma IVA
+      const tieneFactura = sinFacturar === false || sinFacturar === undefined;
+      const totalOperacion = tieneFactura
+        ? importeNeto.mul(new Decimal(1).add(venta.iva.div(100)))
+        : importeNeto;
+      
+      const descuentos = (venta.retencion || new Decimal(0))
+        .add(venta.valorDUT || new Decimal(0))
+        .add(venta.valorGuia || new Decimal(0));
+
+      // Preparar datos de actualización
+      const updateData: any = {
+        precioKg: precioPorKilo,
+        importeNeto: importeNeto.toNumber(),
+        totalOperacion: totalOperacion.toNumber(),
+        totalAPagar: totalOperacion.sub(descuentos).toNumber(),
+        sinFacturar: sinFacturar === true,
+      };
+
+      // Si es USD, también actualizar importeEnUSD y tipoCambio
+      if (moneda === 'USD') {
+        updateData.importeEnUSD = montoTotal.toNumber();
+        if (tipoCambio) {
+          updateData.tipoCambio = tipoCambio;
+          updateData.importeOriginal = montoEnARS.toNumber();
+        }
+      } else {
+        // Si es ARS, el importeOriginal es el mismo monto
+        updateData.importeOriginal = montoEnARS.toNumber();
+      }
+
+      // Actualizar venta
+      const ventaActualizada = await prisma.venta.update({
+        where: { id },
+        data: updateData,
+      });
+
+      res.json({ venta: ventaActualizada });
+    } catch (error: any) {
+      console.error('Error en asignarPrecioPorKilo:', error);
+      res.status(500).json({
+        error: error.message || 'Error interno del servidor',
         code: 'INTERNAL_SERVER_ERROR',
       });
     }
