@@ -20,13 +20,22 @@ export const Toast: React.FC<ToastProps> = ({
   duration = 4000,
   onClose,
 }) => {
+  const onCloseRef = React.useRef(onClose);
+
+  // Mantener la referencia de onClose actualizada
   React.useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  // Timer que se ejecuta cuando el componente se monta o cambia la duración
+  React.useEffect(() => {
+    const timerId = id; // Capturar el id actual
     const timer = setTimeout(() => {
-      onClose(id);
+      onCloseRef.current(timerId);
     }, duration);
 
     return () => clearTimeout(timer);
-  }, [id, duration, onClose]);
+  }, [id, duration]); // Dependemos de id y duration
 
   const getIcon = () => {
     switch (type) {

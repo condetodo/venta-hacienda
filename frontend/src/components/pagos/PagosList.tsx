@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Eye, DollarSign, Calendar, AlertCircle, Tag } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Filter, Eye, DollarSign, Calendar, AlertCircle, Tag, Edit, Trash2 } from 'lucide-react';
 import { Venta } from '../../types';
 import { ventasService } from '../../services/ventas.service';
 import { RegistrarPagoModal } from './RegistrarPagoModal';
 import { AsignarPrecioModal } from './AsignarPrecioModal';
 import { HistorialPagosModal } from './HistorialPagosModal';
+import { useConfirmation } from '../../hooks/useConfirmation';
+import { useToast } from '../../hooks/useToast';
+import { ConfirmationModal } from '../common/ConfirmationModal';
+import { ToastContainer } from '../common/ToastContainer';
 
 interface PagosListProps {
   refreshTrigger?: number;
@@ -19,6 +24,7 @@ interface EstadoCobranzaInfo {
 }
 
 export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
+  const navigate = useNavigate();
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +40,8 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
   const [ventaParaPrecio, setVentaParaPrecio] = useState<Venta | null>(null);
   const [showHistorial, setShowHistorial] = useState(false);
   const [ventaParaHistorial, setVentaParaHistorial] = useState<Venta | null>(null);
+  const { confirmation, handleConfirm, handleCancel, confirmDelete } = useConfirmation();
+  const { toasts, showSuccess, showError: showErrorToast, removeToast } = useToast();
 
   useEffect(() => {
     fetchVentas();
@@ -154,6 +162,34 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
   const handleVerHistorial = (venta: Venta) => {
     setVentaParaHistorial(venta);
     setShowHistorial(true);
+  };
+
+  const handleEditVenta = (venta: Venta) => {
+    navigate(`/ventas/${venta.id}`);
+  };
+
+  const handleDeleteVenta = (venta: Venta) => {
+    confirmDelete(
+      `la venta ${venta.numeroDUT}`,
+      async () => {
+        try {
+          await ventasService.delete(venta.id);
+          fetchVentas();
+          showSuccess(
+            'Venta eliminada',
+            `La venta ${venta.numeroDUT} ha sido eliminada exitosamente.`,
+            2500
+          );
+        } catch (error: any) {
+          console.error('Error al eliminar venta:', error);
+          const errorMessage = error.response?.data?.error || error.message || 'Error al eliminar la venta';
+          showErrorToast(
+            'Error al eliminar',
+            errorMessage
+          );
+        }
+      }
+    );
   };
 
   const handlePagoRegistrado = () => {
@@ -440,6 +476,20 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
                               <Eye className="h-4 w-4" />
                             </button>
                           )}
+                          <button
+                            onClick={() => handleEditVenta(venta)}
+                            className="text-gray-600 hover:text-gray-800"
+                            title="Editar venta"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteVenta(venta)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Eliminar venta"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -480,6 +530,20 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
         }}
         venta={ventaParaHistorial}
       />
+
+      {/* Modales de confirmación y toast */}
+      <ConfirmationModal
+        isOpen={confirmation.isOpen}
+        title={confirmation.title}
+        message={confirmation.message}
+        confirmText={confirmation.confirmText}
+        cancelText={confirmation.cancelText}
+        type={confirmation.type}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
+
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 };
