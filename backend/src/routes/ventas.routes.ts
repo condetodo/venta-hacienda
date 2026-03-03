@@ -7,6 +7,10 @@ const router = Router();
 // Todas las rutas requieren autenticación
 router.use(authenticateToken);
 
+// Dashboard (ANTES de /:id para evitar conflicto con params)
+router.get('/dashboard/stats', ventasController.getDashboardStats);
+router.get('/dashboard/por-mes', ventasController.getVentasPorMes);
+
 // Rutas de ventas
 router.get('/', ventasController.getAll);
 router.get('/:id', ventasController.getById);

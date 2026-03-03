@@ -22,9 +22,19 @@ const upload = multer({
 });
 
 // Función para guardar documento en Supabase Storage
+const sanitizeFileName = (name: string): string => {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove accents
+    .replace(/[ºª°]/g, '')           // Remove special chars
+    .replace(/[^a-zA-Z0-9._-]/g, '_') // Replace anything else with _
+    .replace(/_+/g, '_');             // Collapse multiple underscores
+};
+
 const saveDocumentToStorage = async (file: Express.Multer.File, ventaId: string): Promise<string> => {
   try {
-    const fileName = `${ventaId}/${Date.now()}-${file.originalname}`;
+    const safeName = sanitizeFileName(file.originalname);
+    const fileName = `${ventaId}/${Date.now()}-${safeName}`;
     
     const { data, error } = await supabase.storage
       .from('documentos-hacienda')
