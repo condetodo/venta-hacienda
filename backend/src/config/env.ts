@@ -2,8 +2,8 @@ import { z } from 'zod';
 import dotenv from 'dotenv';
 
 // Cargar variables de entorno lo antes posible
-// 1) .env.local (prioridad en desarrollo)
-dotenv.config({ path: './.env.local' });
+// 1) .env.local (prioridad en desarrollo) - override:true para sobreescribir vars del sistema
+dotenv.config({ path: './.env.local', override: true });
 // 2) .env (fallback)
 dotenv.config();
 
@@ -31,6 +31,9 @@ const envSchema = z.object({
   
   // CORS
   FRONTEND_URL: z.string().url('FRONTEND_URL debe ser una URL válida'),
+
+  // Anthropic Claude Vision API (para extracción de DUTs)
+  ANTHROPIC_API_KEY: z.string().optional(),
 });
 
 // Valores por defecto para desarrollo
@@ -46,6 +49,7 @@ const defaultEnv = {
   PORT: "3000",
   NODE_ENV: "development",
   FRONTEND_URL: "http://localhost:5173",
+  ANTHROPIC_API_KEY: "",
 };
 
 // Combinar variables de entorno con valores por defecto

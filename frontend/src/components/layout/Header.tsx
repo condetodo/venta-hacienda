@@ -1,9 +1,29 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { LogOut, User } from 'lucide-react';
+import { dolarService } from '../../services/dolar.service';
+import { LogOut, Menu, DollarSign, Calendar } from 'lucide-react';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  onToggleSidebar: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const { user, logout } = useAuth();
+  const [cotizacion, setCotizacion] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchCotizacion = async () => {
+      try {
+        const { cotizaciones } = await dolarService.getCotizaciones();
+        const blue = cotizaciones.find(c => c.tipo?.toLowerCase().includes('blue'));
+        const oficial = cotizaciones.find(c => c.tipo?.toLowerCase().includes('oficial'));
+        setCotizacion(blue?.venta || oficial?.venta || cotizaciones[0]?.venta || null);
+      } catch {
+        // Silenciar error - cotización es solo informativa
+      }
+    };
+    fetchCotizacion();
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -13,36 +33,59 @@ export const Header: React.FC = () => {
     }
   };
 
+  const today = new Date().toLocaleDateString('es-AR', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
   return (
-    <header className="bg-white shadow-sm border-b">
-      <div className="px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Sistema de Gestión de Venta de Hacienda
-            </h1>
-            <p className="text-sm text-gray-600">LA LOCHIEL</p>
+    <header className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-border">
+      <div className="flex items-center justify-between h-16 px-4 md:px-6">
+        {/* Left: Hamburger (mobile) + Date */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onToggleSidebar}
+            className="md:hidden p-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <div className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Calendar className="h-3.5 w-3.5" />
+            <span className="capitalize">{today}</span>
           </div>
-          
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <User className="h-5 w-5 text-gray-500" />
-              <span className="text-sm font-medium text-gray-700">
-                {user?.nombre}
+        </div>
+
+        {/* Right: Dollar + User + Logout */}
+        <div className="flex items-center gap-3">
+          {cotizacion && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-100">
+              <DollarSign className="h-3.5 w-3.5 text-amber-600" />
+              <span className="text-xs font-semibold text-amber-700">
+                USD {cotizacion.toLocaleString('es-AR')}
               </span>
             </div>
-            
-            <button
-              onClick={handleLogout}
-              className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Cerrar Sesión</span>
-            </button>
+          )}
+
+          <div className="h-5 w-px bg-border hidden sm:block" />
+
+          <div className="hidden sm:block">
+            <span className="text-sm font-medium text-foreground">
+              {user?.nombre}
+            </span>
           </div>
+
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+            title="Cerrar sesión"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Salir</span>
+          </button>
         </div>
       </div>
     </header>
   );
 };
-

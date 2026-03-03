@@ -6,6 +6,7 @@ import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
 import { Ventas } from './pages/Ventas'
 import { VentaDetail } from './pages/VentaDetail'
+import { VentaEdit } from './pages/VentaEdit'
 import { Pagos } from './pages/Pagos'
 import { NotFound } from './pages/NotFound'
 
@@ -27,6 +28,7 @@ function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="ventas" element={<Ventas />} />
             <Route path="ventas/:id" element={<VentaDetail />} />
+            <Route path="ventas/:id/edit" element={<VentaEdit />} />
             <Route path="pagos" element={<Pagos />} />
           </Route>
           

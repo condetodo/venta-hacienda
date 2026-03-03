@@ -248,34 +248,69 @@ export const ventasController = {
         return;
       }
 
+      // Helper para parsear números (acepta 0 correctamente)
+      const parseNum = (val: any): number | undefined => {
+        if (val === null || val === undefined || val === '') return undefined;
+        const num = typeof val === 'number' ? val : parseFloat(val);
+        return isNaN(num) ? undefined : num;
+      };
+
+      // Helper para parsear fechas
+      const parseDate = (val: any): Date | undefined => {
+        if (!val || val === '') return undefined;
+        const d = new Date(val);
+        return isNaN(d.getTime()) ? undefined : d;
+      };
+
+      // Solo extraer campos actualizables (excluir id, createdAt, updatedAt, relaciones)
+      const data: any = {};
+
+      // Campos de texto
+      if (updateData.establecimientoEmisor !== undefined) data.establecimientoEmisor = updateData.establecimientoEmisor;
+      if (updateData.numeroDUT !== undefined) data.numeroDUT = updateData.numeroDUT;
+      if (updateData.titularDestino !== undefined) data.titularDestino = updateData.titularDestino;
+      if (updateData.numeroRespaDestino !== undefined) data.numeroRespaDestino = updateData.numeroRespaDestino || null;
+      if (updateData.motivo !== undefined) data.motivo = updateData.motivo;
+      if (updateData.categoria !== undefined) data.categoria = updateData.categoria;
+      if (updateData.estado !== undefined) data.estado = updateData.estado;
+      if (updateData.numeroRemito !== undefined) data.numeroRemito = updateData.numeroRemito || null;
+      if (updateData.tropa !== undefined) data.tropa = updateData.tropa || null;
+      if (updateData.numeroFactura !== undefined) data.numeroFactura = updateData.numeroFactura || null;
+      if (updateData.formaPago !== undefined) data.formaPago = updateData.formaPago || null;
+      if (updateData.dondeSeAcredita !== undefined) data.dondeSeAcredita = updateData.dondeSeAcredita || null;
+      if (updateData.observaciones !== undefined) data.observaciones = updateData.observaciones || null;
+      if (updateData.sinFacturar !== undefined) data.sinFacturar = updateData.sinFacturar;
+
+      // Campos numéricos (parseNum acepta 0 correctamente)
+      if (updateData.valorDUT !== undefined) data.valorDUT = parseNum(updateData.valorDUT);
+      if (updateData.valorGuia !== undefined) data.valorGuia = parseNum(updateData.valorGuia);
+      if (updateData.cantidadEnDUT !== undefined) data.cantidadEnDUT = parseNum(updateData.cantidadEnDUT);
+      if (updateData.cantidadCargada !== undefined) data.cantidadCargada = parseNum(updateData.cantidadCargada);
+      if (updateData.cantidadRomaneo !== undefined) data.cantidadRomaneo = parseNum(updateData.cantidadRomaneo);
+      if (updateData.precioKg !== undefined) data.precioKg = parseNum(updateData.precioKg);
+      if (updateData.precioCabeza !== undefined) data.precioCabeza = parseNum(updateData.precioCabeza);
+      if (updateData.importeEnUSD !== undefined) data.importeEnUSD = parseNum(updateData.importeEnUSD);
+      if (updateData.tipoCambio !== undefined) data.tipoCambio = parseNum(updateData.tipoCambio);
+      if (updateData.importeOriginal !== undefined) data.importeOriginal = parseNum(updateData.importeOriginal);
+      if (updateData.importeNeto !== undefined) data.importeNeto = parseNum(updateData.importeNeto);
+      if (updateData.iva !== undefined) data.iva = parseNum(updateData.iva);
+      if (updateData.totalOperacion !== undefined) data.totalOperacion = parseNum(updateData.totalOperacion);
+      if (updateData.retencion !== undefined) data.retencion = parseNum(updateData.retencion);
+      if (updateData.totalAPagar !== undefined) data.totalAPagar = parseNum(updateData.totalAPagar);
+      if (updateData.totalKgs !== undefined) data.totalKgs = parseNum(updateData.totalKgs);
+      if (updateData.kiloLimpioPorCabeza !== undefined) data.kiloLimpioPorCabeza = parseNum(updateData.kiloLimpioPorCabeza);
+
+      // Campos de fecha
+      if (updateData.fechaEmisionDUT !== undefined) data.fechaEmisionDUT = parseDate(updateData.fechaEmisionDUT);
+      if (updateData.fechaCargaDUT !== undefined) data.fechaCargaDUT = parseDate(updateData.fechaCargaDUT);
+      if (updateData.fechaVencimientoDUT !== undefined) data.fechaVencimientoDUT = parseDate(updateData.fechaVencimientoDUT);
+      if (updateData.fechaCargaReal !== undefined) data.fechaCargaReal = parseDate(updateData.fechaCargaReal);
+      if (updateData.fechaPago !== undefined) data.fechaPago = parseDate(updateData.fechaPago);
+
       // Actualizar venta
       const venta = await prisma.venta.update({
         where: { id },
-        data: {
-          ...updateData,
-          // Convertir strings a Decimal para campos numéricos
-          valorDUT: updateData.valorDUT ? parseFloat(updateData.valorDUT) : undefined,
-          valorGuia: updateData.valorGuia ? parseFloat(updateData.valorGuia) : undefined,
-          precioKg: updateData.precioKg ? parseFloat(updateData.precioKg) : undefined,
-          precioCabeza: updateData.precioCabeza ? parseFloat(updateData.precioCabeza) : undefined,
-          importeEnUSD: updateData.importeEnUSD ? parseFloat(updateData.importeEnUSD) : undefined,
-          tipoCambio: updateData.tipoCambio ? parseFloat(updateData.tipoCambio) : undefined,
-          importeOriginal: updateData.importeOriginal ? parseFloat(updateData.importeOriginal) : undefined,
-          importeNeto: updateData.importeNeto ? parseFloat(updateData.importeNeto) : undefined,
-          iva: updateData.iva ? parseFloat(updateData.iva) : undefined,
-          totalOperacion: updateData.totalOperacion ? parseFloat(updateData.totalOperacion) : undefined,
-          retencion: updateData.retencion ? parseFloat(updateData.retencion) : undefined,
-          totalAPagar: updateData.totalAPagar ? parseFloat(updateData.totalAPagar) : undefined,
-          totalPagado: updateData.totalPagado ? parseFloat(updateData.totalPagado) : undefined,
-          totalKgs: updateData.totalKgs ? parseFloat(updateData.totalKgs) : undefined,
-          kiloLimpioPorCabeza: updateData.kiloLimpioPorCabeza ? parseFloat(updateData.kiloLimpioPorCabeza) : undefined,
-          // Convertir strings de fecha a objetos Date
-          fechaEmisionDUT: updateData.fechaEmisionDUT ? new Date(updateData.fechaEmisionDUT) : undefined,
-          fechaCargaDUT: updateData.fechaCargaDUT ? new Date(updateData.fechaCargaDUT) : undefined,
-          fechaVencimientoDUT: updateData.fechaVencimientoDUT ? new Date(updateData.fechaVencimientoDUT) : undefined,
-          fechaCargaReal: updateData.fechaCargaReal ? new Date(updateData.fechaCargaReal) : undefined,
-          fechaPago: updateData.fechaPago ? new Date(updateData.fechaPago) : undefined,
-        },
+        data,
       });
 
       res.json({ venta });

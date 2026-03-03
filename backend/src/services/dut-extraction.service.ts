@@ -1,515 +1,342 @@
+import Anthropic from '@anthropic-ai/sdk';
 import { DUTExtractionResult } from '../../types/dut-extraction';
+import { env } from '../config/env';
 const pdfParse = require('pdf-parse');
-const Tesseract = require('tesseract.js');
 
-export const dutExtractionService = {
-  // Procesar archivo DUT y extraer datos
-  processFile: async (file: Express.Multer.File, tipoArchivo: string): Promise<DUTExtractionResult> => {
-    try {
-      let textoExtraido = '';
+// ============================================================================
+// Cliente Anthropic (lazy init)
+// ============================================================================
 
-      if (tipoArchivo === 'pdf') {
-        textoExtraido = await extractTextFromPDF(file.buffer);
-      } else if (tipoArchivo === 'imagen') {
-        textoExtraido = await extractTextFromImage(file.buffer);
-      } else {
-        throw new Error('Tipo de archivo no soportado');
-      }
+let anthropicClient: Anthropic | null = null;
 
-      // Parsear el texto extraído para obtener datos específicos
-      const datosExtraidos = parseDUTData(textoExtraido);
-
-      return {
-        ...datosExtraidos,
-        confianza: calcularConfianza(datosExtraidos),
-        errores: datosExtraidos.errores || []
-      };
-
-    } catch (error: any) {
-      console.error('Error procesando archivo DUT:', error);
-      throw new Error(`Error al procesar el archivo: ${error.message}`);
-    }
+function getAnthropicClient(): Anthropic | null {
+  if (!env.ANTHROPIC_API_KEY) return null;
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
   }
-};
-
-// Extraer texto de PDF usando pdf-parse
-async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  try {
-    console.log('Iniciando extracción real de PDF con pdf-parse...');
-    console.log('Tamaño del buffer:', buffer.length);
-    
-    const data = await pdfParse(buffer);
-    
-    console.log('Texto extraído del PDF:', data.text.substring(0, 500) + '...');
-    console.log('Número de páginas:', data.numpages);
-    console.log('Información del PDF:', data.info);
-    
-    return data.text;
-  } catch (error) {
-    console.error('Error extrayendo texto del PDF:', error);
-    console.error('Stack trace:', error.stack);
-    throw new Error(`Error al extraer texto del PDF: ${error.message}`);
-  }
+  return anthropicClient;
 }
 
-// Extraer texto de imagen usando OCR
-async function extractTextFromImage(buffer: Buffer): Promise<string> {
-  try {
-    console.log('Iniciando OCR con Tesseract.js en backend...');
-    console.log('Tamaño del buffer:', buffer.length);
-    
-    // Configurar Tesseract para español
-    const { data: { text, confidence } } = await Tesseract.recognize(
-      buffer,
-      'spa', // Idioma español
+// ============================================================================
+// System Prompt para extracción de DUTs (se cachea con prompt caching)
+// ============================================================================
+
+const DUT_EXTRACTION_SYSTEM_PROMPT = `Sos un experto en documentos DUT (Documento Único de Tránsito) de SENASA Argentina para hacienda ovina.
+
+TAREA: Extraer datos de un DUT y devolver JSON puro.
+
+## ERRORES COMUNES QUE DEBES EVITAR:
+
+ERROR 1 - MOTIVO: El campo "Motivo:" está en la esquina superior derecha de la página 1, dentro de un recuadro junto a "Fecha Carga" y "Fecha Vencimiento". El valor es "Faena", "Cría", "Reproducción" o similar. CERCA aparece otro campo "Oficina Local:" con el nombre de una oficina SENASA. "Oficina Local" NO ES el motivo. Si extraes "Oficina Local:" como motivo, ESTÁ MAL.
+
+ERROR 2 - FECHAS CARGA/VENCIMIENTO: "Fecha Carga" y "Fecha Vencimiento" están en el MISMO recuadro que el motivo (esquina superior derecha página 1). NO confundir con "Fecha y hora de emisión" que está en la página 2. Los tres son campos DIFERENTES.
+
+ERROR 3 - VALOR GUÍA: "valorGuia" es el TOTAL A PAGAR de la boleta ARECH (Agencia de Recaudación provincial Chubut). Es una PÁGINA SEPARADA del DUT (generalmente la última página). Tiene un encabezado "ARECH" y dice "TOTAL A PAGAR $ XXXXX". Este valor suele ser un número redondo grande (ej: 24000, 15000). NO confundir con la tasa SA013 de SENASA que es un monto chico (~$229).
+
+ERROR 4 - VALOR DUT: "valorDUT" es el "Total:" que aparece en la sección "CONFORMIDAD DEL SOLICITANTE" de la página 1. Es la SUMA de todas las tasas SENASA (SA008-A + SA013 + otras). NO es solo SA008-A.
+
+## ESTRUCTURA DEL DOCUMENTO
+
+PÁGINA 1:
+- Superior derecha: recuadro con Fecha Carga, Fecha Vencimiento, Motivo
+- Izquierda: código de barras + N° DUT
+- Centro: DATOS DEL ORIGEN (izq) y DATOS DEL DESTINO (der)
+- Centro-abajo: DETALLES DE CARGA (especie, categoría, cantidad)
+- Inferior: CONFORMIDAD DEL SOLICITANTE con desglose de tasas y Total
+
+PÁGINA 2:
+- "Fecha y hora de emisión: DD/MM/YYYY HH:MM" (esta es fechaEmisionDUT)
+- Triplicado del DUT
+
+PÁGINA 3 (o última):
+- Boleta ARECH provincial con "TOTAL A PAGAR $ XXXXX" (esta es valorGuia)
+
+## JSON A DEVOLVER (sin markdown, sin backticks, sin explicaciones):
+
+{
+  "numeroDUT": "N° del DUT, ej: 030565163-5",
+  "titularDestino": "Titular de DATOS DEL DESTINO (NO el origen)",
+  "numeroRespaDestino": "RENSPA del DESTINO, formato XX.XXX.X.XXXXX/XX",
+  "fechaEmisionDUT": "YYYY-MM-DD de 'Fecha y hora de emisión' (página 2)",
+  "fechaCargaDUT": "YYYY-MM-DD de 'Fecha Carga' (recuadro superior derecho página 1)",
+  "fechaVencimientoDUT": "YYYY-MM-DD de 'Fecha Vencimiento' (recuadro superior derecho página 1)",
+  "motivo": "SOLO: Faena|Cría|Reproducción UE|Reproducción (del recuadro superior derecho, NUNCA Oficina Local)",
+  "categoria": "OVEJA|BORREGO|CORDERO|CAPON|CARNERO|BORREGA",
+  "valorDUT": "number - Total de CONFORMIDAD DEL SOLICITANTE (suma tasas SENASA)",
+  "valorGuia": "number - TOTAL A PAGAR de boleta ARECH provincial (última página). null si no existe",
+  "cantidadEnDUT": "number entero - cantidad de animales",
+  "confianza": "number 0-100",
+  "errores": ["campos no encontrados"]
+}
+
+## REGLAS:
+1. Fechas: DD/MM/YYYY → YYYY-MM-DD siempre
+2. Montos argentinos: punto=miles, coma=decimal. "27.005,00" = 27005.00
+3. Si un campo no se encuentra → null
+4. Devolvé SOLO el JSON, nada más`;
+
+// ============================================================================
+// Extracción principal con Claude Vision
+// ============================================================================
+
+async function extractWithClaudeVision(
+  client: Anthropic,
+  file: Express.Multer.File,
+  tipoArchivo: string
+): Promise<DUTExtractionResult> {
+  const base64Data = file.buffer.toString('base64');
+
+  // Construir el content block según el tipo de archivo
+  let contentBlock: Anthropic.Messages.ContentBlockParam;
+
+  if (tipoArchivo === 'pdf') {
+    contentBlock = {
+      type: 'document' as any,
+      source: {
+        type: 'base64',
+        media_type: 'application/pdf',
+        data: base64Data,
+      },
+    } as any;
+  } else {
+    // Imagen (JPG/PNG)
+    const mediaType = file.mimetype as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+    contentBlock = {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: mediaType,
+        data: base64Data,
+      },
+    };
+  }
+
+  console.log('🤖 Enviando documento a Claude Vision...');
+  console.log(`   Tipo: ${tipoArchivo}, Tamaño: ${(file.size / 1024).toFixed(1)}KB`);
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1024,
+    system: [
       {
-        logger: (m: any) => {
-          if (m.status === 'recognizing text') {
-            console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
-          }
-        }
-      }
-    );
+        type: 'text',
+        text: DUT_EXTRACTION_SYSTEM_PROMPT,
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
+    messages: [
+      {
+        role: 'user',
+        content: [
+          contentBlock,
+          {
+            type: 'text',
+            text: 'Extraé los datos de este documento DUT y devolvelos en el formato JSON especificado.',
+          },
+        ],
+      },
+    ],
+  });
 
-    console.log('Texto extraído por OCR:', text);
-    console.log('Confianza:', confidence);
-
-    if (confidence < 30) {
-      console.warn('Baja confianza en el OCR:', confidence);
-    }
-
-    return text;
-  } catch (error) {
-    console.error('Error en OCR:', error);
-    throw new Error(`Error al extraer texto de la imagen: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+  // Parsear respuesta de Claude
+  const textContent = response.content.find((block) => block.type === 'text');
+  if (!textContent || textContent.type !== 'text') {
+    throw new Error('Claude no devolvió contenido de texto');
   }
+
+  console.log('🤖 Respuesta de Claude recibida');
+  console.log(`   Tokens: input=${response.usage.input_tokens}, output=${response.usage.output_tokens}`);
+  console.log('🤖 Respuesta RAW de Claude:', textContent.text);
+
+  // Extraer JSON (Claude puede envolverlo en code blocks)
+  const rawText = textContent.text;
+  const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    console.error('No se encontró JSON en la respuesta:', rawText);
+    throw new Error('No se pudo parsear JSON de la respuesta de Claude');
+  }
+
+  const parsed = JSON.parse(jsonMatch[0]);
+
+  // Mapear y normalizar la respuesta
+  const result: DUTExtractionResult = {
+    numeroDUT: parsed.numeroDUT || undefined,
+    titularDestino: parsed.titularDestino || undefined,
+    numeroRespaDestino: parsed.numeroRespaDestino || undefined,
+    fechaEmisionDUT: parsed.fechaEmisionDUT || undefined,
+    fechaCargaDUT: parsed.fechaCargaDUT || undefined,
+    fechaVencimientoDUT: parsed.fechaVencimientoDUT || undefined,
+    motivo: parsed.motivo || undefined,
+    categoria: normalizeCategoria(parsed.categoria),
+    valorDUT: typeof parsed.valorDUT === 'number' ? parsed.valorDUT : parseNumberSafe(parsed.valorDUT),
+    valorGuia: typeof parsed.valorGuia === 'number' ? parsed.valorGuia : parseNumberSafe(parsed.valorGuia),
+    cantidadEnDUT: typeof parsed.cantidadEnDUT === 'number' ? parsed.cantidadEnDUT : parseIntSafe(parsed.cantidadEnDUT),
+    confianza: typeof parsed.confianza === 'number' ? parsed.confianza : 85,
+    errores: Array.isArray(parsed.errores) ? parsed.errores : [],
+  };
+
+  console.log('✅ Extracción Claude Vision exitosa:', {
+    numeroDUT: result.numeroDUT,
+    titularDestino: result.titularDestino,
+    confianza: result.confianza,
+  });
+
+  return result;
 }
 
-// Parsear datos específicos del DUT
-function parseDUTData(texto: string): Partial<DUTExtractionResult> {
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function normalizeCategoria(cat: string | undefined | null): string | undefined {
+  if (!cat) return undefined;
+  const upper = cat
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  const map: Record<string, string> = {
+    OVEJA: 'OVEJA',
+    BORREGO: 'BORREGO',
+    CORDERO: 'CORDERO',
+    CAPON: 'CAPON',
+    CARNERO: 'CARNERO',
+    BORREGA: 'BORREGA',
+  };
+  return map[upper] || cat.toUpperCase();
+}
+
+function parseNumberSafe(val: any): number | undefined {
+  if (val === null || val === undefined) return undefined;
+  const num = typeof val === 'string' ? parseFloat(val.replace(',', '.')) : Number(val);
+  return isNaN(num) ? undefined : num;
+}
+
+function parseIntSafe(val: any): number | undefined {
+  if (val === null || val === undefined) return undefined;
+  const num = typeof val === 'string' ? parseInt(val, 10) : Math.round(Number(val));
+  return isNaN(num) ? undefined : num;
+}
+
+// ============================================================================
+// Fallback: Extracción con regex (método anterior)
+// ============================================================================
+
+async function extractWithRegexFallback(
+  file: Express.Multer.File,
+  tipoArchivo: string
+): Promise<DUTExtractionResult> {
+  let textoExtraido = '';
+
+  if (tipoArchivo === 'pdf') {
+    const data = await pdfParse(file.buffer);
+    textoExtraido = data.text;
+  } else {
+    // Sin OCR disponible, retornar vacío para entrada manual
+    return {
+      confianza: 0,
+      errores: ['No hay API de Claude configurada y OCR no está disponible. Ingrese los datos manualmente.'],
+    };
+  }
+
+  const datos = parseDUTDataRegex(textoExtraido);
+
+  return {
+    ...datos,
+    confianza: calcularConfianzaRegex(datos),
+    errores: datos.errores || [],
+  };
+}
+
+// Parseo regex simplificado (fallback)
+function parseDUTDataRegex(texto: string): Partial<DUTExtractionResult> {
   const datos: Partial<DUTExtractionResult> = {};
   const errores: string[] = [];
 
   try {
-    // Buscar número de DUT (patrones específicos para DTE)
-    const numeroDUTPatterns = [
-      // Patrones específicos para DT-e
-      /(?:DT-e\s*N°?\s*)(\d+[\w\-_]*)/i,
+    // Número de DUT
+    const dutPatterns = [
       /(?:DTe\s*-\s*DUT\s*N°?\s*)(\d+[\w\-_]*)/i,
+      /(?:DT-e\s*N°?\s*)(\d+[\w\-_]*)/i,
       /(?:DUT\s*N°?\s*)(\d+[\w\-_]*)/i,
       /(?:N°?\s*de\s*DUT:\s*)(\d+)/i,
       /(?:Nro\.?\s*de\s*DUT:\s*)(\d+)/i,
-      // Patrón específico para el formato del documento actual
-      /(?:DT-e\s*N°\s*)(\d{9,}[\w\-_]*)/i,
-      // Patrón para números que empiezan con 0 (como 017885409-7)
-      /(?:N°\s*)(0\d{8,}[\w\-_]*)/i,
     ];
-    
-    console.log('🔍 Buscando número de DUT...');
-    console.log('Texto a buscar:', texto.substring(0, 500));
-    
-    for (let i = 0; i < numeroDUTPatterns.length; i++) {
-      const pattern = numeroDUTPatterns[i];
-      const match = texto.match(pattern);
-      console.log(`Patrón ${i + 1}:`, pattern.source);
-      console.log(`Match encontrado:`, match);
-      
-      if (match) {
-        datos.numeroDUT = match[1];
-        console.log('✅ Número DUT encontrado:', datos.numeroDUT);
-        break;
-      }
-    }
-    
-    if (!datos.numeroDUT) {
-      console.log('❌ No se encontró número de DUT');
+    for (const p of dutPatterns) {
+      const m = texto.match(p);
+      if (m) { datos.numeroDUT = m[1]; break; }
     }
 
-    // Buscar titular destino (patrones específicos para DTE - DESTINO)
-    const clientePatterns = [
-      // Patrón específico para la sección "Destino" en la parte inferior del documento
-      /(?:Destino:\s*[^\n\r]*\s*Titular:\s*)([^\n\r]+?)(?:\s*Establecimiento|$)/i,
-      // Patrón para "FRIGORÍFICO" seguido del nombre completo
-      /(?:FRIGORÍFICO\s+)([^\n\r]+?)(?:\s*Localidad|$)/i,
-      // Patrón específico para "DATOS DEL DESTINO" con "Titular:"
-      /(?:DATOS\s+DEL\s+DESTINO[\s\S]*?Titular:\s*)([^\n\r]+?)(?:\s*CUIT|$)/i,
-      // Patrón específico para encontrar el titular después de "DATOS DEL ORIGEN"
-      /(?:DATOS\s+DEL\s+ORIGEN[\s\S]*?DATOS\s+DEL\s+DESTINO[\s\S]*?Titular:\s*)([^\n\r]+?)(?:\s*CUIT|$)/i,
-      // Patrón para "ESTANCIA" seguido del nombre
-      /(?:ESTANCIA\s+)([^\n\r]+?)(?:\s*SOCIEDAD|$)/i,
-      // Patrón genérico para titular destino
-      /(?:Titular:\s*)([^\n\r]+?)(?:\s*CUIT|$)/i,
-      // Patrones de respaldo
-      /(?:Destino:[\s\S]*?Titular:\s*)([^\n\r]+)/i,
-      /(?:HACIA[\s\S]*?Titular:\s*)([^\n\r]+)/i,
-      /(?:titular|destino|cliente)[\s:]*([^\n\r]+)/i,
-      /(?:comprador|adquirente)[\s:]*([^\n\r]+)/i,
-      /(?:establecimiento|empresa)[\s:]*([^\n\r]+)/i,
-    ];
-    
-    // DEBUG: Log del texto extraído para entender la estructura
-    console.log('=== DEBUG: Texto extraído del PDF ===');
-    console.log('Primeros 1000 caracteres:', texto.substring(0, 1000));
-    console.log('=====================================');
-    
-    // Buscar todas las secciones "DATOS DEL"
-    const seccionesDatados = texto.match(/DATOS\s+DEL\s+[A-Z]+/gi);
-    console.log('Secciones encontradas:', seccionesDatados);
-    
-    // Buscar titular destino específicamente en la sección de destino
-    let titularDestinoEncontrado = false;
-    
-    // DEBUG: Buscar todas las ocurrencias de "Titular:"
-    const todosLosTitulares = texto.match(/Titular:\s*[^\n\r]+/gi);
-    console.log('Todos los titulares encontrados:', todosLosTitulares);
-    
-    // DEBUG: Buscar específicamente la sección "Destino" que se repite 3 veces
-    const seccionesDestino = texto.match(/Destino:\s*[^\n\r]*\s*Titular:\s*[^\n\r]*\s*Establecimiento:\s*[^\n\r]*/gi);
-    console.log('Secciones Destino encontradas:', seccionesDestino);
-    
-    // PRIMERA PRIORIDAD: Buscar en la sección "Destino" que se repite 3 veces
+    // Titular destino
+    const seccionesDestino = texto.match(
+      /Destino:\s*[^\n\r]*\s*Titular:\s*[^\n\r]*\s*Establecimiento:\s*[^\n\r]*/gi
+    );
     if (seccionesDestino && seccionesDestino.length > 0) {
-      // Tomar la primera ocurrencia de la sección "Destino"
-      const primeraSeccionDestino = seccionesDestino[0];
-      console.log('Primera sección Destino:', primeraSeccionDestino);
-      
-      const titularEnDestino = primeraSeccionDestino.match(/Titular:\s*([^\n\r]+?)(?:\s*Establecimiento|$)/i);
-      console.log('Titular en sección Destino:', titularEnDestino);
-      
-      if (titularEnDestino && titularEnDestino[1].trim().length > 3) {
-        datos.titularDestino = titularEnDestino[1].trim();
-        titularDestinoEncontrado = true;
-        console.log('✅ Titular destino encontrado en sección Destino:', datos.titularDestino);
-      }
-    }
-    
-    // Segunda prioridad: buscar en la sección "DATOS DEL DESTINO" (que viene después de "DATOS DEL ORIGEN")
-    const seccionDestino = texto.match(/(?:DATOS\s+DEL\s+DESTINO[\s\S]*?)(?=DATOS\s+DEL\s+ORIGEN|$)/i);
-    console.log('Sección destino encontrada:', seccionDestino ? seccionDestino[0].substring(0, 200) + '...' : 'No encontrada');
-    
-    if (seccionDestino) {
-      const titularEnDestino = seccionDestino[0].match(/(?:Titular:\s*)([^\n\r]+?)(?:\s*CUIT|$)/i);
-      console.log('Titular en sección destino:', titularEnDestino);
-      if (titularEnDestino && titularEnDestino[1].trim().length > 3) {
-        datos.titularDestino = titularEnDestino[1].trim();
-        titularDestinoEncontrado = true;
-        console.log('✅ Titular destino encontrado en sección destino:', datos.titularDestino);
-      }
-    }
-    
-    // Si no se encontró, buscar específicamente después de "DATOS DEL ORIGEN"
-    if (!titularDestinoEncontrado) {
-      const seccionDestinoDespuesOrigen = texto.match(/(?:DATOS\s+DEL\s+ORIGEN[\s\S]*?DATOS\s+DEL\s+DESTINO[\s\S]*?)(?=DATOS\s+DEL\s+MOVIMIENTO|$)/i);
-      console.log('Sección destino después de origen:', seccionDestinoDespuesOrigen ? seccionDestinoDespuesOrigen[0].substring(0, 200) + '...' : 'No encontrada');
-      
-      if (seccionDestinoDespuesOrigen) {
-        const titularEnDestino = seccionDestinoDespuesOrigen[0].match(/(?:Titular:\s*)([^\n\r]+?)(?:\s*CUIT|$)/i);
-        console.log('Titular en sección destino después de origen:', titularEnDestino);
-        if (titularEnDestino && titularEnDestino[1].trim().length > 3) {
-          datos.titularDestino = titularEnDestino[1].trim();
-          titularDestinoEncontrado = true;
-          console.log('✅ Titular destino encontrado después de origen:', datos.titularDestino);
-        }
-      }
-    }
-    
-    // Si no se encontró en la sección específica, usar patrones generales
-    if (!titularDestinoEncontrado) {
-      console.log('🔍 Buscando con patrones generales...');
-      for (let i = 0; i < clientePatterns.length; i++) {
-        const pattern = clientePatterns[i];
-        const match = texto.match(pattern);
-        console.log(`Patrón ${i + 1}:`, pattern.source);
-        console.log(`Match encontrado:`, match);
-        if (match && match[1].trim().length > 3) {
-          datos.titularDestino = match[1].trim();
-          console.log('✅ Titular destino encontrado con patrón general:', datos.titularDestino);
-          break;
-        }
-      }
-    }
-    
-    console.log('🎯 Titular destino final:', datos.titularDestino);
-
-    // Buscar número Respa (código de DESTINO) - Priorizar destino sobre origen
-    const respaPatterns = [
-      // Patrón específico para "DATOS DEL DESTINO" con "ID Destino:"
-      /(?:DATOS\s+DEL\s+DESTINO[\s\S]*?ID\s+Destino:\s*)([^\n\r]+)/i,
-      // Patrón para "ID Destino:" específico
-      /(?:ID\s+Destino:\s*)([^\n\r]+)/i,
-      // Patrón para "Destino:" con "Code:"
-      /(?:Destino:[\s\S]*?Code:\s*)([^\n\r]+)/i,
-      // Patrón para "HACIA" con "ID Destino:"
-      /(?:HACIA[\s\S]*?ID\s+Destino:\s*)([^\n\r]+)/i,
-      // Patrón específico para RENSPA de destino (formato: XX.XXX.X.XXXXX/XX)
-      /(\d{2}\.\d{3}\.\d{1}\.\d{5}\/\d{2})/i,
-      // Patrones de respaldo
-      /(?:respa|rspa)[\s:]*(\d+)/i,
-    ];
-    
-    // Buscar RENSPA de destino específicamente
-    let renspaDestinoEncontrado = false;
-    
-    // Patrones específicos para encontrar RENSPA de destino
-    const respaDestinoPatterns = [
-      // Patrón específico para "Destino: XX.XXX.X.XXXXX/XX"
-      /(?:Destino:\s*)(\d{2}\.\d{3}\.\d{1}\.\d{5}\/\d{2})/i,
-      // Patrón para "RENSPA de Destino: XX.XXX.X.XXXXX/XX"
-      /(?:RENSPA\s+de\s+Destino:\s*)(\d{2}\.\d{3}\.\d{1}\.\d{5}\/\d{2})/i,
-      // Patrón para "ID Destino: XX.XXX.X.XXXXX/XX"
-      /(?:ID\s+Destino:\s*)(\d{2}\.\d{3}\.\d{1}\.\d{5}\/\d{2})/i,
-    ];
-    
-    // Buscar todos los RENSPA en el documento
-    const todosLosRenspa = texto.match(/(\d{2}\.\d{3}\.\d{1}\.\d{5}\/\d{2})/g);
-    
-    if (todosLosRenspa && todosLosRenspa.length >= 2) {
-      // Si hay múltiples RENSPA, tomar el segundo (que debería ser el de destino)
-      // El primero suele ser el origen, el segundo el destino
-      datos.numeroRespaDestino = todosLosRenspa[1];
-      renspaDestinoEncontrado = true;
-    } else {
-      // Si no hay múltiples, usar patrones específicos
-      for (const pattern of respaDestinoPatterns) {
-        const match = texto.match(pattern);
-        if (match) {
-          const renspa = match[1].trim();
-          if (/^\d{2}\.\d{3}\.\d{1}\.\d{5}\/\d{2}$/.test(renspa)) {
-            datos.numeroRespaDestino = renspa;
-            renspaDestinoEncontrado = true;
-            break;
-          }
-        }
-      }
-    }
-    
-    // Si aún no se encontró, buscar en secciones específicas
-    if (!renspaDestinoEncontrado) {
-      // Buscar en la sección de destino específicamente
-      const seccionDestinoMatch = texto.match(/(?:Destino:[\s\S]*?)(?=Consignatario|Especie|$)/i);
-      if (seccionDestinoMatch) {
-        const renspaEnDestino = seccionDestinoMatch[0].match(/(\d{2}\.\d{3}\.\d{1}\.\d{5}\/\d{2})/i);
-        if (renspaEnDestino) {
-          datos.numeroRespaDestino = renspaEnDestino[1];
-        }
+      const titularMatch = seccionesDestino[0].match(/Titular:\s*([^\n\r]+?)(?:\s*Establecimiento|$)/i);
+      if (titularMatch && titularMatch[1].trim().length > 3) {
+        datos.titularDestino = titularMatch[1].trim();
       }
     }
 
-    // Buscar fechas (patrones específicos para DTE)
-    const fechaPatterns = [
-      /(?:Fecha\s+Carga:\s*)(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
-      /(?:Fecha\s+Vencimiento:\s*)(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
-      /(?:Fecha\s+y\s+hora\s+de\s+emisión:\s*)(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
-      /(?:Fecha\s+Emisión:\s*)(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
-      /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/g,
-      /(\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2})/g,
-    ];
-    
-    const fechas: string[] = [];
-    for (const pattern of fechaPatterns) {
-      const matches = texto.match(pattern);
-      if (matches) {
-        fechas.push(...matches);
-      }
+    // RENSPA destino (segundo RENSPA del documento)
+    const todosRenspa = texto.match(/(\d{2}\.\d{3}\.\d{1}\.\d{5}\/\d{2})/g);
+    if (todosRenspa && todosRenspa.length >= 2) {
+      datos.numeroRespaDestino = todosRenspa[1];
     }
 
-    if (fechas.length > 0) {
-      // Mapear fechas específicas según el contexto
-      for (let i = 0; i < fechas.length; i++) {
-        const fecha = fechas[i];
-        // Buscar contexto específico para cada fecha
-        const contextoEmision = texto.match(new RegExp(`(?:Fecha\\s+y\\s+hora\\s+de\\s+emisión|Fecha\\s+Emisión)[\\s:]*${fecha.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'));
-        const contextoCarga = texto.match(new RegExp(`(?:Fecha\\s+Carga)[\\s:]*${fecha.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'));
-        const contextoVencimiento = texto.match(new RegExp(`(?:Fecha\\s+Vencimiento)[\\s:]*${fecha.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'));
-        
-        if (contextoEmision) {
-          datos.fechaEmisionDUT = convertirFecha(fecha);
-        } else if (contextoCarga) {
-          datos.fechaCargaDUT = convertirFecha(fecha);
-        } else if (contextoVencimiento) {
-          datos.fechaVencimientoDUT = convertirFecha(fecha);
-        } else {
-          // Si no hay contexto específico, asignar por orden
-          if (!datos.fechaEmisionDUT) {
-            datos.fechaEmisionDUT = convertirFecha(fecha);
-          } else if (!datos.fechaCargaDUT) {
-            datos.fechaCargaDUT = convertirFecha(fecha);
-          } else if (!datos.fechaVencimientoDUT) {
-            datos.fechaVencimientoDUT = convertirFecha(fecha);
-          }
-        }
-      }
+    // Fechas
+    const fechaEmision = texto.match(/(?:Fecha\s+y\s+hora\s+de\s+emisión[:\s]*)(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    const fechaCarga = texto.match(/(?:Fecha\s+Carga[:\s]*)(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    const fechaVenc = texto.match(/(?:Fecha\s+Vencimiento[:\s]*)(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    if (fechaEmision) datos.fechaEmisionDUT = convertirFecha(fechaEmision[1]);
+    if (fechaCarga) datos.fechaCargaDUT = convertirFecha(fechaCarga[1]);
+    if (fechaVenc) datos.fechaVencimientoDUT = convertirFecha(fechaVenc[1]);
+
+    // Motivo
+    const motivoMatch = texto.match(/(?:Motivo:\s*)([^\n\r]+?)(?:\n|Oficina|$)/i);
+    if (motivoMatch) {
+      datos.motivo = motivoMatch[1].trim();
+    } else if (texto.toLowerCase().includes('frigorífico') || texto.toLowerCase().includes('frigorifico')) {
+      datos.motivo = 'Faena';
     }
 
-    // Buscar motivo (patrones específicos para DTE)
-    const motivoPatterns = [
-      /(?:Motivo:\s*)([^\n\r]+?)(?:\n|Oficina|Telefono|$)/i,
-      /(?:motivo|destino)[\s:]*([^\n\r]+?)(?:\n|Oficina|Telefono|$)/i,
-      /(?:faena|cría|cria|reproducción|reproduccion|Reproducción\s+UE)/i,
-    ];
-    
-    let motivoEncontrado = false;
-    
-    // Buscar específicamente "Reproducción UE" con patrones más flexibles
-    const reproduccionUEPatterns = [
-      /(?:Motivo:\s*)(Reproducción\s+UE)/i,
-      /(?:Motivo:\s*)(Reproducción\s*UE)/i,
-      /(?:Motivo:\s*)(Reproduccion\s+UE)/i,
-      /(?:Motivo:\s*)(Reproduccion\s*UE)/i,
-      /(?:Motivo:\s*)([^Oficina]*Reproducción[^Oficina]*UE[^Oficina]*)/i,
-      /(?:Motivo:\s*)([^Oficina]*Reproduccion[^Oficina]*UE[^Oficina]*)/i,
-    ];
-    for (const pattern of reproduccionUEPatterns) {
-      const reproduccionUEMatch = texto.match(pattern);
-      if (reproduccionUEMatch) {
-        datos.motivo = reproduccionUEMatch[1].trim();
-        motivoEncontrado = true;
-        break;
-      }
-    }
-    
-    // Si no se encontró "Reproducción UE", usar patrones generales
-    if (!motivoEncontrado) {
-      for (const pattern of motivoPatterns) {
-        const match = texto.match(pattern);
-        if (match) {
-          const motivoTexto = match[1] || match[0];
-          // Limpiar el motivo pero preservar acentos y caracteres especiales
-          const motivoLimpio = motivoTexto.trim().replace(/[^\w\sáéíóúüñÁÉÍÓÚÜÑ]/g, '').trim();
-          if (motivoLimpio.length > 2 && !motivoLimpio.toLowerCase().includes('oficina')) {
-            datos.motivo = motivoLimpio;
-            motivoEncontrado = true;
-            break;
-          }
-        }
-      }
-    }
-    
-    // Si no se encontró motivo, inferir del destino (frigorífico = FAENA)
-    if (!motivoEncontrado) {
-      if (texto.toLowerCase().includes('frigorífico') || texto.toLowerCase().includes('frigorifico')) {
-        datos.motivo = 'Faena';
-      } else if (texto.toLowerCase().includes('reproducción') || texto.toLowerCase().includes('reproduccion')) {
-        datos.motivo = 'Reproducción UE';
-      }
+    // Categoría
+    const catMatch = texto.match(/(?:Ovinos\s*-\s*)([^\n\r]+)/i);
+    if (catMatch) {
+      const catText = catMatch[1].toLowerCase();
+      if (catText.includes('capón') || catText.includes('capon')) datos.categoria = 'CAPON';
+      else if (catText.includes('oveja')) datos.categoria = 'OVEJA';
+      else if (catText.includes('carnero')) datos.categoria = 'CARNERO';
+      else if (catText.includes('borrego')) datos.categoria = 'BORREGO';
+      else if (catText.includes('cordero')) datos.categoria = 'CORDERO';
+      else if (catText.includes('borrega')) datos.categoria = 'BORREGA';
     }
 
-    // Buscar categoría de animal (patrones específicos para DTE)
-    const categoriaPatterns = [
-      /(?:Categorias:\s*)([^\n\r]+)/i,
-      /(?:categoría|categoria|tipo)[\s:]*([^\n\r]+)/i,
-      /(?:oveja|borrego|cordero|capón|capon|carnero|borrega)/i,
-      /(?:Ovinos\s*-\s*)([^\n\r]+)/i, // Patrón específico para "Ovinos - Carnero"
-    ];
-    
-    for (const pattern of categoriaPatterns) {
-      const match = texto.match(pattern);
-      if (match) {
-        const categoriaTexto = match[1] || match[0];
-        if (categoriaTexto.toLowerCase().includes('carnero')) {
-          datos.categoria = 'CARNERO';
-        } else if (categoriaTexto.toLowerCase().includes('oveja')) {
-          datos.categoria = 'OVEJA';
-        } else if (categoriaTexto.toLowerCase().includes('borrego')) {
-          datos.categoria = 'BORREGO';
-        } else if (categoriaTexto.toLowerCase().includes('cordero')) {
-          datos.categoria = 'CORDERO';
-        } else if (categoriaTexto.toLowerCase().includes('capón') || categoriaTexto.toLowerCase().includes('capon')) {
-          datos.categoria = 'CAPON';
-        } else if (categoriaTexto.toLowerCase().includes('borrega')) {
-          datos.categoria = 'BORREGA';
-        }
-        break;
-      }
-    }
+    // Cantidad
+    const cantMatch = texto.match(/(?:Cantidad Total:\s*)(\d+)/i) || texto.match(/(?:CANTIDAD\s*)(\d+)/i);
+    if (cantMatch) datos.cantidadEnDUT = parseInt(cantMatch[1]);
 
-    // Buscar valores monetarios (patrones específicos para DTE)
-    const valorPatterns = [
-      /(?:Res\.\s*189\/2018\s*Cod\.\s*SA008\s*\$)(\d+[.,]\d+)/i,
-      /(?:Res\.\s*189\/2018\s*Cod\.\s*SA013\s*\$)(\d+[.,]\d+)/i,
-      /(?:Res\.\s*1\/2022\s*Cod\.\s*SA008-A\s*\$)(\d+[.,]\d+)/i,
-      /(?:valor|precio|importe)[\s:]*\$?[\s]*(\d+[.,]\d{2})/i,
-      /(\d+[.,]\d{2})[\s]*pesos?/i,
-      /(\d+[.,]\d{2})[\s]*dólares?/i,
-      /(\d+[.,]\d+)[\s]*\$/, // Patrón genérico para valores con $
-      /(\d+[.,]\d+)[\s]*pesos?/i, // Patrón genérico para pesos
-      /(\d+[.,]\d+)[\s]*dólares?/i, // Patrón genérico para dólares
-    ];
-    
-    const valores: number[] = [];
-    for (const pattern of valorPatterns) {
-      const matches = texto.match(new RegExp(pattern.source, 'gi'));
-      if (matches) {
-        for (const match of matches) {
-          const valorMatch = match.match(/(\d+[.,]\d+)/);
-          if (valorMatch) {
-            const valor = parseFloat(valorMatch[1].replace(',', '.'));
-            valores.push(valor);
-          }
-        }
-      }
-    }
-    
-    if (valores.length > 0) {
-      // Buscar valores específicos por contexto
-      const valorDUTMatch = texto.match(/(?:Res\.\s*189\/2018\s*Cod\.\s*SA008\s*\$)(\d+[.,]\d+)/i);
-      const valorGuiaMatch = texto.match(/(?:Res\.\s*189\/2018\s*Cod\.\s*SA013\s*\$)(\d+[.,]\d+)/i);
-      
-      if (valorDUTMatch) {
-        datos.valorDUT = parseFloat(valorDUTMatch[1].replace(',', '.'));
-      } else {
-        datos.valorDUT = valores[0];
-      }
-      
-      if (valorGuiaMatch) {
-        datos.valorGuia = parseFloat(valorGuiaMatch[1].replace(',', '.'));
-      } else if (valores.length > 1) {
-        datos.valorGuia = valores[1];
-      }
-    }
+    // Valores monetarios
+    const valorDUTMatch = texto.match(/(?:Res\.\s*501\/2023\s*Cod\.\s*SA008-A\s*\$?)(\d+[.,]?\d*)/i)
+      || texto.match(/(?:Res\.\s*189\/2018\s*Cod\.\s*SA008\s*\$?)(\d+[.,]?\d*)/i);
+    const valorGuiaMatch = texto.match(/(?:Res\.\s*501\/2023\s*Cod\.\s*SA013\s*\$?)(\d+[.,]?\d*)/i)
+      || texto.match(/(?:Res\.\s*189\/2018\s*Cod\.\s*SA013\s*\$?)(\d+[.,]?\d*)/i);
+    if (valorDUTMatch) datos.valorDUT = parseFloat(valorDUTMatch[1].replace(',', '.'));
+    if (valorGuiaMatch) datos.valorGuia = parseFloat(valorGuiaMatch[1].replace(',', '.'));
 
-    // Buscar cantidad (patrones específicos para DTE)
-    const cantidadPatterns = [
-      /(?:Cantidad Total:\s*)(\d+)/i,
-      /(?:Cantidad:\s*)(\d+)/i,
-      /(?:cantidad|total)[\s:]*(\d+)/i,
-      /(?:ESPECIE:\s*[^\n\r]*\s*CANTIDAD:\s*)(\d+)/i, // Patrón específico para "ESPECIE: Ovinos - CANTIDAD: 4"
-    ];
-    
-    for (const pattern of cantidadPatterns) {
-      const match = texto.match(pattern);
-      if (match) {
-        datos.cantidadEnDUT = parseInt(match[1]);
-        break;
-      }
-    }
-
-    // Si no se encontraron datos suficientes, agregar errores
-    if (!datos.numeroDUT) {
-      errores.push('No se pudo extraer el número de DUT');
-    }
-    if (!datos.titularDestino) {
-      errores.push('No se pudo extraer el titular destino');
-    }
-    if (!datos.fechaEmisionDUT) {
-      errores.push('No se pudo extraer la fecha de emisión');
-    }
-
+    // Reportar campos faltantes
+    if (!datos.numeroDUT) errores.push('No se pudo extraer el número de DUT');
+    if (!datos.titularDestino) errores.push('No se pudo extraer el titular destino');
+    if (!datos.fechaEmisionDUT) errores.push('No se pudo extraer la fecha de emisión');
   } catch (error) {
     errores.push('Error al procesar el texto del documento');
   }
 
-  if (errores.length > 0) {
-    datos.errores = errores;
-  }
-
+  if (errores.length > 0) datos.errores = errores;
   return datos;
 }
 
-// Calcular nivel de confianza de la extracción
-function calcularConfianza(datos: Partial<DUTExtractionResult>): number {
+function calcularConfianzaRegex(datos: Partial<DUTExtractionResult>): number {
   let confianza = 0;
-  
   if (datos.numeroDUT) confianza += 20;
   if (datos.titularDestino) confianza += 20;
   if (datos.fechaEmisionDUT) confianza += 15;
@@ -517,57 +344,69 @@ function calcularConfianza(datos: Partial<DUTExtractionResult>): number {
   if (datos.categoria) confianza += 10;
   if (datos.cantidadEnDUT) confianza += 15;
   if (datos.valorDUT) confianza += 10;
-
   return Math.min(confianza, 100);
 }
 
-// Convertir fecha al formato ISO
 function convertirFecha(fecha: string): string {
   try {
-    // Limpiar la fecha de espacios y caracteres extraños
-    let fechaLimpia = fecha.trim().replace(/[^\d\/\-\.]/g, '');
-    
-    // Si la fecha es muy corta o no tiene formato válido, retornar tal como está
-    if (fechaLimpia.length < 6) {
-      console.log('Fecha muy corta o inválida:', fecha);
-      return fecha;
-    }
-    
-    // Manejar diferentes formatos de fecha
-    let fechaFormateada = fechaLimpia;
-    
-    // Si tiene formato DD/MM/YYYY, convertir a YYYY-MM-DD
-    if (fechaLimpia.includes('/')) {
-      const partes = fechaLimpia.split('/');
+    const limpia = fecha.trim().replace(/[^\d\/\-\.]/g, '');
+    if (limpia.length < 6) return fecha;
+
+    if (limpia.includes('/')) {
+      const partes = limpia.split('/');
       if (partes.length === 3) {
         const dia = partes[0].padStart(2, '0');
         const mes = partes[1].padStart(2, '0');
         const año = partes[2].length === 2 ? `20${partes[2]}` : partes[2];
-        fechaFormateada = `${año}-${mes}-${dia}`;
+        return `${año}-${mes}-${dia}`;
       }
     }
-    
-    // Si tiene formato DD-MM-YYYY, convertir a YYYY-MM-DD
-    if (fechaLimpia.includes('-') && fechaLimpia.split('-')[0].length <= 2) {
-      const partes = fechaLimpia.split('-');
+
+    if (limpia.includes('-') && limpia.split('-')[0].length <= 2) {
+      const partes = limpia.split('-');
       if (partes.length === 3) {
         const dia = partes[0].padStart(2, '0');
         const mes = partes[1].padStart(2, '0');
         const año = partes[2].length === 2 ? `20${partes[2]}` : partes[2];
-        fechaFormateada = `${año}-${mes}-${dia}`;
+        return `${año}-${mes}-${dia}`;
       }
     }
 
-    // Validar que la fecha sea válida
-    const fechaObj = new Date(fechaFormateada);
-    if (isNaN(fechaObj.getTime())) {
-      console.log('Fecha inválida después de conversión:', fechaFormateada);
-      return fecha; // Retornar fecha original si no se puede convertir
-    }
-
-    return fechaFormateada;
-  } catch (error) {
-    console.error('Error convirtiendo fecha:', error);
+    return limpia;
+  } catch {
     return fecha;
   }
 }
+
+// ============================================================================
+// Servicio público
+// ============================================================================
+
+export const dutExtractionService = {
+  processFile: async (
+    file: Express.Multer.File,
+    tipoArchivo: string
+  ): Promise<DUTExtractionResult> => {
+    try {
+      // Intentar con Claude Vision primero
+      const client = getAnthropicClient();
+      if (client) {
+        try {
+          const result = await extractWithClaudeVision(client, file, tipoArchivo);
+          return result;
+        } catch (error: any) {
+          console.error('⚠️ Claude Vision falló, cayendo a regex:', error.message);
+          // Caer al fallback regex
+        }
+      } else {
+        console.log('ℹ️ ANTHROPIC_API_KEY no configurada, usando extracción regex');
+      }
+
+      // Fallback: regex
+      return await extractWithRegexFallback(file, tipoArchivo);
+    } catch (error: any) {
+      console.error('Error procesando archivo DUT:', error);
+      throw new Error(`Error al procesar el archivo: ${error.message}`);
+    }
+  },
+};
