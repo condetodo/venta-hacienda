@@ -18,7 +18,17 @@ const PORT = env.PORT;
 // Middleware de seguridad
 app.use(helmet());
 app.use(cors({
-  origin: env.FRONTEND_URL,
+  origin: (origin, callback) => {
+    // Permitir requests sin origin (ej: Postman, curl)
+    if (!origin) return callback(null, true);
+    // En desarrollo, permitir cualquier localhost
+    if (env.NODE_ENV === 'development' && /^http:\/\/localhost:\d+$/.test(origin)) {
+      return callback(null, true);
+    }
+    // En producción, solo permitir FRONTEND_URL
+    if (origin === env.FRONTEND_URL) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 
@@ -47,10 +57,18 @@ app.use('/api/dut', dutRoutes);
 app.use(errorHandler);
 
 // Iniciar servidor
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
+});
+
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Puerto ${PORT} en uso. Cerrá otros procesos o cambiá PORT en .env`);
+    process.exit(1);
+  }
+  throw err;
 });
 
 export default app;

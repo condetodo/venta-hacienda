@@ -55,7 +55,7 @@ export const Dashboard: React.FC = () => {
 
         if (statsRes.status === 'fulfilled') setStats(statsRes.value);
         if (mesRes.status === 'fulfilled') setVentasPorMes(mesRes.value);
-        if (ventasRes.status === 'fulfilled') setRecentVentas(ventasRes.value.data);
+        if (ventasRes.status === 'fulfilled') setRecentVentas(ventasRes.value.ventas ?? []);
       } catch {
         setError('No se pudieron cargar los datos del dashboard');
       } finally {
