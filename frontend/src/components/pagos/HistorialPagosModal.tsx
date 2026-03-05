@@ -64,14 +64,9 @@ export const HistorialPagosModal: React.FC<HistorialPagosModalProps> = ({
     return formas[formaPago] || formaPago;
   };
 
-  const totalPagado = pagos.reduce((sum, pago) => {
-    if (pago.moneda === 'USD' && pago.tipoCambio) {
-      return sum + pago.monto * pago.tipoCambio;
-    }
-    return sum + pago.monto;
-  }, 0);
-
-  const saldoPendiente = venta ? (venta.totalAPagar || 0) - totalPagado : 0;
+  // Usar totalPagado de la venta (ya viene convertido a ARS desde el backend)
+  const totalPagado = venta?.totalPagado || 0;
+  const saldoPendiente = venta ? Math.max(0, (venta.totalAPagar || 0) - totalPagado) : 0;
 
   if (!isOpen || !venta) return null;
 

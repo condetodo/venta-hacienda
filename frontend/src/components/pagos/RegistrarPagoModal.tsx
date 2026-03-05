@@ -197,7 +197,8 @@ export const RegistrarPagoModal: React.FC<RegistrarPagoModalProps> = ({
         ? data.monto * data.tipoCambio 
         : data.monto;
 
-      if (montoPago > saldoPendiente) {
+      // Tolerancia de $1 para evitar errores de redondeo con Decimals
+      if (montoPago > saldoPendiente + 1) {
         alert(`El monto del pago (${formatCurrency(montoPago)}) excede el saldo pendiente (${formatCurrency(saldoPendiente)})`);
         return;
       }

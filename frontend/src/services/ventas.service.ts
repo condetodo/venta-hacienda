@@ -38,8 +38,17 @@ export const ventasService = {
     return response.data;
   },
 
-  // Marcar venta como retirado con datos del remito
-  marcarComoRetirado: async (id: string, datosRemito: any): Promise<{ venta: Venta }> => {
+  // Marcar venta como retirado con datos del remito (soporta multiples remitos)
+  marcarComoRetirado: async (id: string, datosRemito: {
+    remitos?: Array<{ numero: string; fecha: string; cantidad: number }>;
+    numeroRemito?: string;
+    fechaRemito?: string;
+    cliente?: string;
+    transportista?: string;
+    categoria?: string;
+    motivo?: string;
+    cantidadCargada?: number;
+  }): Promise<{ venta: Venta }> => {
     const response = await api.post(`/ventas/${id}/marcar-retirado`, datosRemito);
     return response.data;
   },
