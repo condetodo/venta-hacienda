@@ -105,5 +105,5 @@ Thumbs.db
 .supabase/
 
 # Prisma
-prisma/migrations/
+# prisma/migrations/ - migrations must be committed for production deploys
 

@@ -78,14 +78,14 @@ export class VentasService {
 
     const estadosPermitidos = estadosValidos[venta.estado as keyof typeof estadosValidos] || [];
     
-    if (!estadosPermitidos.includes(nuevoEstado as any)) {
+    if (!estadosPermitidos.includes(nuevoEstado as never)) {
       throw new Error(`No se puede cambiar de ${venta.estado} a ${nuevoEstado}`);
     }
 
     // Validaciones específicas por estado
     switch (nuevoEstado) {
       case 'LIQUIDADO':
-        const tieneRomaneo = venta.documentos.some(doc => doc.tipo === 'ROMANEO');
+        const tieneRomaneo = venta.documentos.some((doc: any) => doc.tipo === 'ROMANEO');
         if (!tieneRomaneo) {
           throw new Error('No se puede liquidar sin romaneo del frigorífico');
         }
@@ -228,7 +228,7 @@ export class VentasService {
     });
 
     // Agrupar por mes
-    const ventasAgrupadas = ventasPorMes.reduce((acc, venta) => {
+    const ventasAgrupadas = ventasPorMes.reduce((acc: any, venta: any) => {
       const mes = venta.fechaEmisionDUT.getMonth();
       const año = venta.fechaEmisionDUT.getFullYear();
       const clave = `${año}-${mes.toString().padStart(2, '0')}`;

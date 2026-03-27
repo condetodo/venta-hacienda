@@ -118,7 +118,7 @@ export const dutController = {
       const resultado = await dutExtractionService.processFile(req.file, tipoArchivo);
       console.log('Resultado de procesamiento:', resultado);
 
-      res.json({
+      return res.json({
         success: true,
         data: resultado
       });
@@ -126,7 +126,7 @@ export const dutController = {
     } catch (error: any) {
       console.error('Error procesando archivo DUT:', error);
       console.error('Stack trace:', error.stack);
-      res.status(500).json({
+      return res.status(500).json({
         error: error.message || 'Error al procesar el archivo DUT'
       });
     }
@@ -195,7 +195,7 @@ export const dutController = {
       const documento = await createDocumentRecord(ventaId, req.file, documentUrl, resultado);
       console.log('Registro de documento creado:', documento.id);
 
-      res.json({
+      return res.json({
         success: true,
         data: resultado,
         documento: {
@@ -209,7 +209,7 @@ export const dutController = {
     } catch (error: any) {
       console.error('Error procesando archivo DUT:', error);
       console.error('Stack trace:', error.stack);
-      res.status(500).json({
+      return res.status(500).json({
         error: error.message || 'Error al procesar el archivo DUT'
       });
     }
@@ -266,7 +266,7 @@ export const dutController = {
       const documento = await createDocumentRecord(ventaId, req.file, documentUrl, null);
       console.log('Registro de documento creado:', documento.id);
 
-      res.json({
+      return res.json({
         success: true,
         documento: {
           id: documento.id,
@@ -279,7 +279,7 @@ export const dutController = {
     } catch (error: any) {
       console.error('Error subiendo documento:', error);
       console.error('Stack trace:', error.stack);
-      res.status(500).json({
+      return res.status(500).json({
         error: error.message || 'Error al subir el documento'
       });
     }

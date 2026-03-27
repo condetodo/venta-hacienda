@@ -211,7 +211,7 @@ export const ventasController = {
 
         console.log('✅ Venta creada exitosamente:', venta.id);
         res.status(201).json({ venta });
-      } catch (createError) {
+      } catch (createError: any) {
         console.error('❌ Error creando venta:', createError);
         console.error('Stack trace:', createError.stack);
         res.status(500).json({

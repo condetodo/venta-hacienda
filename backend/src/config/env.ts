@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import dotenv from 'dotenv';
 
-// Cargar variables de entorno lo antes posible
-// 1) .env.local (prioridad en desarrollo) - override:true para sobreescribir vars del sistema
-dotenv.config({ path: './.env.local', override: true });
-// 2) .env (fallback)
-dotenv.config();
+// Cargar variables de entorno (solo en desarrollo, en producción vienen del entorno)
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config({ path: './.env.local', override: true });
+  dotenv.config();
+}
 
 // Schema de validación para variables de entorno
 const envSchema = z.object({
@@ -26,7 +26,7 @@ const envSchema = z.object({
   DOLAR_API_URL: z.string().url('DOLAR_API_URL debe ser una URL válida'),
   
   // Server
-  PORT: z.string().transform(Number).default(3000),
+  PORT: z.string().default("3000").transform(Number),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   
   // CORS

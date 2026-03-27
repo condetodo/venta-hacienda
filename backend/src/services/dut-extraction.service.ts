@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { DUTExtractionResult } from '../../types/dut-extraction';
+import { DUTExtractionResult } from '../types/dut-extraction';
 import { env } from '../config/env';
 const pdfParse = require('pdf-parse');
 
