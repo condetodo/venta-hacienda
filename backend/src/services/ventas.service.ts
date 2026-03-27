@@ -98,7 +98,7 @@ export class VentasService {
         break;
       
       case 'FINALIZADO':
-        const saldoPendiente = (venta.totalAPagar || 0) - (venta.totalPagado || 0);
+        const saldoPendiente = Number(venta.totalAPagar || 0) - Number(venta.totalPagado || 0);
         if (saldoPendiente > 0) {
           throw new Error(`Saldo pendiente: $${saldoPendiente}. No se puede finalizar.`);
         }
@@ -192,7 +192,7 @@ export class VentasService {
     const totalVendido = totalVendidoMes._sum.totalAPagar || 0;
     const totalAPagar = totalPorCobrar._sum.totalAPagar || 0;
     const totalPagado = totalPorCobrar._sum.totalPagado || 0;
-    const totalPorCobrarCalculado = totalAPagar - totalPagado;
+    const totalPorCobrarCalculado = Number(totalAPagar) - Number(totalPagado);
 
     return {
       ventasActivas,
