@@ -54,7 +54,8 @@ export const VentaDetail: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-AR');
+    const [y, m, d] = dateString.substring(0, 10).split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('es-AR');
   };
 
   const getEstadoColor = (estado: string) => {

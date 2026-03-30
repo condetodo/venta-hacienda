@@ -219,7 +219,8 @@ export const PagosList: React.FC<PagosListProps> = ({ refreshTrigger }) => {
 
   const formatDate = (dateString: string | undefined) => {
     if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('es-AR');
+    const [y, m, d] = dateString.substring(0, 10).split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('es-AR');
   };
 
   const getEstadoCobranzaBadge = (estadoInfo: EstadoCobranzaInfo) => {

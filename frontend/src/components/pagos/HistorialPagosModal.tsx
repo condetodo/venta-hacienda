@@ -47,7 +47,8 @@ export const HistorialPagosModal: React.FC<HistorialPagosModalProps> = ({
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-AR', {
+    const [y, m, d] = dateString.substring(0, 10).split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('es-AR', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

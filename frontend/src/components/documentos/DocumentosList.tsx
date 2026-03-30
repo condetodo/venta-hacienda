@@ -157,7 +157,11 @@ export const DocumentosList: React.FC<DocumentosListProps> = ({
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-ES', {
+    // For timestamps with time component, use as-is; for date-only strings, prevent timezone shift
+    const date = dateString.length <= 10
+      ? (() => { const [y, m, d] = dateString.split('-').map(Number); return new Date(y, m - 1, d); })()
+      : new Date(dateString);
+    return date.toLocaleDateString('es-ES', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',

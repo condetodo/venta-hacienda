@@ -212,7 +212,8 @@ export const VentasList: React.FC<VentasListProps> = ({
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-AR');
+    const [y, m, d] = dateString.substring(0, 10).split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('es-AR');
   };
 
   if (loading) {
@@ -529,7 +530,7 @@ export const VentasList: React.FC<VentasListProps> = ({
                     Cliente: {conflictoDUT.ventaExistente.titularDestino}
                   </p>
                   <p className="text-sm text-gray-500">
-                    Fecha: {new Date(conflictoDUT.ventaExistente.fechaEmisionDUT).toLocaleDateString()}
+                    Fecha: {formatDate(conflictoDUT.ventaExistente.fechaEmisionDUT)}
                   </p>
                 </div>
               )}
