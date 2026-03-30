@@ -283,20 +283,32 @@ function parseDUTDataRegex(texto: string): Partial<DUTExtractionResult> {
       datos.numeroRespaDestino = todosRenspa[1];
     }
 
-    // Fechas
-    const fechaEmision = texto.match(/(?:Fecha\s+y\s+hora\s+de\s+emisión[:\s]*)(\d{1,2}\/\d{1,2}\/\d{4})/i);
-    const fechaCarga = texto.match(/(?:Fecha\s+Carga[:\s]*)(\d{1,2}\/\d{1,2}\/\d{4})/i);
-    const fechaVenc = texto.match(/(?:Fecha\s+Vencimiento[:\s]*)(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    // Fechas (las fechas pueden estar en la misma línea o en la línea siguiente)
+    const fechaEmision = texto.match(/(?:Fecha\s+y\s+hora\s+de\s+emisi[oó]n[:\s]*)(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    const fechaCarga = texto.match(/(?:Fecha\s+Carga[:\s]*?)(\d{1,2}\/\d{1,2}\/\d{4})/i)
+      || texto.match(/Fecha\s+Carga\s*\n\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    const fechaVenc = texto.match(/(?:Fecha\s+Vencimiento[:\s]*?)(\d{1,2}\/\d{1,2}\/\d{4})/i)
+      || texto.match(/Fecha\s+Vencimiento\s*\n\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
     if (fechaEmision) datos.fechaEmisionDUT = convertirFecha(fechaEmision[1]);
     if (fechaCarga) datos.fechaCargaDUT = convertirFecha(fechaCarga[1]);
     if (fechaVenc) datos.fechaVencimientoDUT = convertirFecha(fechaVenc[1]);
 
-    // Motivo
-    const motivoMatch = texto.match(/(?:Motivo:\s*)([^\n\r]+?)(?:\n|Oficina|$)/i);
+    // Motivo (puede estar en la misma línea o en la siguiente; nunca es "Oficina Local")
+    const motivoMatch = texto.match(/Motivo:\s*\n\s*([^\n\r]+)/i)
+      || texto.match(/Motivo:\s*([^\n\r]+)/i);
     if (motivoMatch) {
-      datos.motivo = motivoMatch[1].trim();
-    } else if (texto.toLowerCase().includes('frigorífico') || texto.toLowerCase().includes('frigorifico')) {
-      datos.motivo = 'Faena';
+      let motivo = motivoMatch[1].trim();
+      // Filtrar si capturó "Oficina Local" por error
+      if (!/oficina\s*local/i.test(motivo) && motivo.length > 0) {
+        datos.motivo = motivo;
+      }
+    }
+    if (!datos.motivo) {
+      if (texto.toLowerCase().includes('frigorífico') || texto.toLowerCase().includes('frigorifico') || texto.toLowerCase().includes('faena')) {
+        datos.motivo = 'Faena';
+      } else if (/cr[ií]a\s*UE/i.test(texto)) {
+        datos.motivo = 'Cría UE';
+      }
     }
 
     // Categoría
@@ -316,12 +328,27 @@ function parseDUTDataRegex(texto: string): Partial<DUTExtractionResult> {
     if (cantMatch) datos.cantidadEnDUT = parseInt(cantMatch[1]);
 
     // Valores monetarios
-    const valorDUTMatch = texto.match(/(?:Res\.\s*501\/2023\s*Cod\.\s*SA008-A\s*\$?)(\d+[.,]?\d*)/i)
-      || texto.match(/(?:Res\.\s*189\/2018\s*Cod\.\s*SA008\s*\$?)(\d+[.,]?\d*)/i);
-    const valorGuiaMatch = texto.match(/(?:Res\.\s*501\/2023\s*Cod\.\s*SA013\s*\$?)(\d+[.,]?\d*)/i)
-      || texto.match(/(?:Res\.\s*189\/2018\s*Cod\.\s*SA013\s*\$?)(\d+[.,]?\d*)/i);
-    if (valorDUTMatch) datos.valorDUT = parseFloat(valorDUTMatch[1].replace(',', '.'));
-    if (valorGuiaMatch) datos.valorGuia = parseFloat(valorGuiaMatch[1].replace(',', '.'));
+    // valorDUT = Total de tasas SENASA (sección CONFORMIDAD DEL SOLICITANTE)
+    const totalSenasaMatch = texto.match(/Total:\s*\$\s*([\d.,]+)/i);
+    if (totalSenasaMatch) {
+      datos.valorDUT = parseFloat(totalSenasaMatch[1].replace(/\./g, '').replace(',', '.'));
+    } else {
+      // Fallback: buscar SA008-A individual
+      const valorDUTMatch = texto.match(/(?:Res\.\s*501\/2023\s*Cod\.\s*SA008-A\s*\$?\s*)([\d.,]+)/i)
+        || texto.match(/(?:Res\.\s*189\/2018\s*Cod\.\s*SA008\s*\$?\s*)([\d.,]+)/i);
+      if (valorDUTMatch) datos.valorDUT = parseFloat(valorDUTMatch[1].replace(/\./g, '').replace(',', '.'));
+    }
+
+    // valorGuia = TOTAL A PAGAR de boleta provincial ARECH (página 2/3)
+    const valorGuiaProvincial = texto.match(/TOTAL\s+A\s+PAGAR\s*\$\s*([\d.,]+)/i);
+    if (valorGuiaProvincial) {
+      datos.valorGuia = parseFloat(valorGuiaProvincial[1].replace(/\./g, '').replace(',', '.'));
+    } else {
+      // Fallback: buscar tasa SA013
+      const valorGuiaMatch = texto.match(/(?:Res\.\s*501\/2023\s*Cod\.\s*SA013\s*\$?\s*)([\d.,]+)/i)
+        || texto.match(/(?:Res\.\s*189\/2018\s*Cod\.\s*SA013\s*\$?\s*)([\d.,]+)/i);
+      if (valorGuiaMatch) datos.valorGuia = parseFloat(valorGuiaMatch[1].replace(/\./g, '').replace(',', '.'));
+    }
 
     // Reportar campos faltantes
     if (!datos.numeroDUT) errores.push('No se pudo extraer el número de DUT');
