@@ -74,9 +74,9 @@
 - [ ] Exportacion a Excel/PDF
 
 ### Deploy a Produccion
-- [ ] Backend en Railway
-- [ ] Frontend en Vercel
-- [ ] PostgreSQL en Railway
+- [x] Backend en Railway
+- [x] Frontend servido por el backend en Railway (sin Vercel)
+- [x] PostgreSQL en Railway
 - [ ] Supabase Storage en produccion
 - [ ] Migracion de datos
 

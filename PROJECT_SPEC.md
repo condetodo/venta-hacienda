@@ -125,8 +125,7 @@ Cada venta tiene documentos asociados:
 
 ### Containerización y Despliegue
 - **Docker** - Contenedores para desarrollo local (Supabase)
-- **Railway** - Backend + PostgreSQL de producción
-- **Vercel** - Frontend de producción
+- **Railway** - Backend + frontend (un solo servicio) + PostgreSQL de producción
 - **Supabase** - PostgreSQL + Storage de desarrollo, Storage de producción
 
 ---
@@ -737,11 +736,11 @@ supabase restart
 - PostgreSQL: Railway
 - Storage: Supabase Storage (plan gratuito)
 - Backend: Railway (https://tu-backend.railway.app)
-- Frontend: Vercel (https://tu-app.vercel.app)
+- Frontend: servido por el mismo servicio de Railway (el backend entrega el build de Vite)
 
 **Deploy:**
 - Backend: Conectar repo a Railway, setear variables de entorno
-- Frontend: Conectar repo a Vercel, setear variables de entorno
+- Frontend: no requiere deploy aparte; `railway.json` compila backend y frontend y el backend sirve `frontend/dist`
 
 ---
 
@@ -798,7 +797,7 @@ PORT="${PORT}"
 NODE_ENV="production"
 
 # CORS
-FRONTEND_URL="https://tu-app.vercel.app"
+FRONTEND_URL="https://tu-app.up.railway.app"  # opcional: mismo origen ya está permitido
 ```
 
 ### Frontend - `.env.local` (Desarrollo)
@@ -809,10 +808,10 @@ VITE_SUPABASE_URL="http://localhost:54321"
 VITE_SUPABASE_ANON_KEY="tu-anon-key-local"
 ```
 
-### Frontend - `.env.production` (Vercel)
+### Frontend - producción (Railway)
 
 ```env
-VITE_API_URL="https://tu-backend.railway.app/api"
+# No hace falta definir VITE_API_URL: en producción usa /api (mismo origen)
 VITE_SUPABASE_URL="https://tu-proyecto.supabase.co"
 VITE_SUPABASE_ANON_KEY="tu-anon-key-produccion"
 ```
@@ -1057,7 +1056,7 @@ hacienda-app/
 
 ### Sprint 4 (Semana 7): Deploy y producción
 - ✅ Configurar Railway (backend + PostgreSQL)
-- ✅ Configurar Vercel (frontend)
+- ✅ Frontend servido desde Railway (sin Vercel)
 - ✅ Migrar datos de desarrollo a producción
 - ✅ Testing en producción
 - ✅ Documentación de uso
@@ -1138,8 +1137,7 @@ hacienda-app/
 
 ### Tools
 - [Prisma Studio](https://www.prisma.io/studio) - GUI para base de datos
-- [Railway](https://railway.app) - Hosting backend
-- [Vercel](https://vercel.com) - Hosting frontend
+- [Railway](https://railway.app) - Hosting backend y frontend
 
 ---
 

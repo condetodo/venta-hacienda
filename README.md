@@ -124,7 +124,7 @@ venta-hacienda/
 - **Base de Datos**: PostgreSQL (Supabase local + Railway producción)
 - **Storage**: Supabase Storage
 - **Containerización**: Docker (Supabase local)
-- **Deploy**: Railway (backend) + Vercel (frontend)
+- **Deploy**: Railway (un solo servicio: el backend sirve el build del frontend, más Postgres)
 
 ## 📖 Documentación
 
