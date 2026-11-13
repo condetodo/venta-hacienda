@@ -83,13 +83,18 @@ export const pagosController = {
         },
       });
 
-      // Calcular total pagado
-      const totalPagado = await prisma.pago.aggregate({
+      // Calcular total pagado (convirtiendo USD a ARS)
+      const todosLosPagos = await prisma.pago.findMany({
         where: { ventaId: pagoData.ventaId },
-        _sum: { monto: true },
       });
 
-      const totalPagadoDecimal = totalPagado._sum.monto || new Decimal(0);
+      const totalPagadoDecimal = todosLosPagos.reduce((sum, p) => {
+        const monto = new Decimal(p.monto);
+        if (p.moneda === 'USD' && p.tipoCambio) {
+          return sum.add(monto.mul(new Decimal(p.tipoCambio)));
+        }
+        return sum.add(monto);
+      }, new Decimal(0));
 
       // Actualizar solo el totalPagado
       // NO calcular precio si ya existe (eso se hace con asignarPrecioPorKilo)
@@ -154,16 +159,23 @@ export const pagosController = {
         },
       });
 
-      // Recalcular total pagado en la venta
-      const totalPagado = await prisma.pago.aggregate({
+      // Recalcular total pagado en la venta (convirtiendo USD a ARS)
+      const todosLosPagos = await prisma.pago.findMany({
         where: { ventaId: existingPago.ventaId },
-        _sum: { monto: true },
       });
+
+      const totalPagadoRecalc = todosLosPagos.reduce((sum, p) => {
+        const m = new Decimal(p.monto);
+        if (p.moneda === 'USD' && p.tipoCambio) {
+          return sum.add(m.mul(new Decimal(p.tipoCambio)));
+        }
+        return sum.add(m);
+      }, new Decimal(0));
 
       await prisma.venta.update({
         where: { id: existingPago.ventaId },
         data: {
-          totalPagado: totalPagado._sum.monto || new Decimal(0),
+          totalPagado: totalPagadoRecalc.toNumber(),
         },
       });
 
@@ -201,16 +213,23 @@ export const pagosController = {
         where: { id },
       });
 
-      // Recalcular total pagado en la venta
-      const totalPagado = await prisma.pago.aggregate({
+      // Recalcular total pagado en la venta (convirtiendo USD a ARS)
+      const pagosRestantes = await prisma.pago.findMany({
         where: { ventaId },
-        _sum: { monto: true },
       });
+
+      const totalPagadoRecalc = pagosRestantes.reduce((sum, p) => {
+        const m = new Decimal(p.monto);
+        if (p.moneda === 'USD' && p.tipoCambio) {
+          return sum.add(m.mul(new Decimal(p.tipoCambio)));
+        }
+        return sum.add(m);
+      }, new Decimal(0));
 
       await prisma.venta.update({
         where: { id: ventaId },
         data: {
-          totalPagado: totalPagado._sum.monto || new Decimal(0),
+          totalPagado: totalPagadoRecalc.toNumber(),
         },
       });
 

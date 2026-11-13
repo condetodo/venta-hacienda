@@ -32,8 +32,9 @@ model Venta {
   cantidadEnDUT         Int         // Cantidad autorizada en el DUT (ej: 300)
   
   fechaCargaReal        DateTime?   // Fecha real del remito (puede coincidir con DUT)
-  cantidadCargada       Int?        // Cantidad real retirada del campo (ej: 290)
-  
+  cantidadCargada       Int?        // Cantidad real retirada del campo (ej: 290) - suma de todos los remitos
+  remitos               Json?       // Array de {numero, fecha, cantidad, documentoId?} para múltiples remitos
+
   cantidadRomaneo       Int?        // Cantidad recibida en frigorífico (ej: 288)
   fechaRomaneo          DateTime?
   tropa                 String?

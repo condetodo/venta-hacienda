@@ -356,18 +356,16 @@ export const ventasController = {
     }
   },
 
-  // Marcar como retirado con datos del remito
+  // Marcar como retirado con datos del remito (soporta 1-3 remitos)
   marcarComoRetirado: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const { 
+      const {
+        remitos,
+        // Backward-compatible fields
         numeroRemito,
         fechaRemito,
-        cliente,
-        transportista,
-        categoria,
-        motivo,
-        cantidadCargada
+        cantidadCargada,
       } = req.body;
 
       // Verificar que la venta existe
@@ -397,12 +395,31 @@ export const ventasController = {
       // Preparar datos para actualizar
       const updateData: any = {
         estado: 'RETIRADO',
-        cantidadCargada: cantidadCargada || existingVenta.cantidadEnDUT,
       };
 
-      // Si hay fecha del remito, convertirla y guardarla
-      if (fechaRemito) {
-        updateData.fechaCargaReal = new Date(fechaRemito);
+      // Si vienen remitos (nuevo formato), usarlos
+      if (remitos && Array.isArray(remitos) && remitos.length > 0) {
+        updateData.remitos = remitos;
+        // cantidadCargada = suma de cantidades de todos los remitos
+        updateData.cantidadCargada = remitos.reduce((sum: number, r: any) => sum + (r.cantidad || 0), 0);
+        // fechaCargaReal = fecha del primer remito
+        if (remitos[0].fecha) {
+          updateData.fechaCargaReal = new Date(remitos[0].fecha);
+        }
+      } else {
+        // Backward compatibility: campos individuales
+        updateData.cantidadCargada = cantidadCargada || existingVenta.cantidadEnDUT;
+        if (fechaRemito) {
+          updateData.fechaCargaReal = new Date(fechaRemito);
+        }
+        // Guardar como remito unico en el JSON
+        if (numeroRemito) {
+          updateData.remitos = [{
+            numero: numeroRemito,
+            fecha: fechaRemito || new Date().toISOString().split('T')[0],
+            cantidad: cantidadCargada || existingVenta.cantidadEnDUT,
+          }];
+        }
       }
 
       // Actualizar venta

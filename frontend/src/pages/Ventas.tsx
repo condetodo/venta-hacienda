@@ -95,6 +95,7 @@ export const Ventas: React.FC = () => {
       
       // Llamar al servicio para marcar como retirado
       const { venta } = await ventasService.marcarComoRetirado(data.ventaId, {
+        remitos: data.remitos,
         numeroRemito: data.numeroRemito,
         fechaRemito: data.fechaRemito,
         cliente: data.cliente,

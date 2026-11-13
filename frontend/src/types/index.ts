@@ -76,6 +76,13 @@ export enum RolUsuario {
 // INTERFACES PRINCIPALES
 // ============================================
 
+export interface RemitoEntry {
+  numero: string;
+  fecha: string;
+  cantidad: number;
+  documentoId?: string;
+}
+
 export interface Venta {
   id: string;
   
@@ -96,6 +103,7 @@ export interface Venta {
   cantidadEnDUT: number;
   fechaCargaReal?: string;
   cantidadCargada?: number;
+  remitos?: RemitoEntry[];
   cantidadRomaneo?: number;
   fechaRomaneo?: string;
   tropa?: string;
