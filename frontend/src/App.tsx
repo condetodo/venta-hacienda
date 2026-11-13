@@ -8,6 +8,7 @@ import { Ventas } from './pages/Ventas'
 import { VentaDetail } from './pages/VentaDetail'
 import { VentaEdit } from './pages/VentaEdit'
 import { Pagos } from './pages/Pagos'
+import { Cronograma } from './pages/Cronograma'
 import { NotFound } from './pages/NotFound'
 
 function App() {
@@ -30,6 +31,7 @@ function App() {
             <Route path="ventas/:id" element={<VentaDetail />} />
             <Route path="ventas/:id/edit" element={<VentaEdit />} />
             <Route path="pagos" element={<Pagos />} />
+            <Route path="cronograma" element={<Cronograma />} />
           </Route>
           
           {/* 404 */}

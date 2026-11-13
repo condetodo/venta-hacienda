@@ -4,11 +4,13 @@ import {
   LayoutDashboard,
   FileText,
   DollarSign,
+  CalendarDays,
   X
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Cronograma', href: '/cronograma', icon: CalendarDays },
   { name: 'Ventas', href: '/ventas', icon: FileText },
   { name: 'Pagos', href: '/pagos', icon: DollarSign },
 ];

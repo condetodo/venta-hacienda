@@ -78,6 +78,7 @@ model Venta {
   documentos            Documento[]
   pagos                 Pago[]      // Para registrar pagos parciales
   alertas               Alerta[]
+  cargasProgramadas     CargaProgramada[]
   
   // === TIMESTAMPS ===
   createdAt             DateTime    @default(now())
@@ -270,4 +271,35 @@ enum Severidad {
 enum RolUsuario {
   ADMIN               // Acceso total
   USUARIO             // Acceso limitado (futuro)
+}
+
+// ============================================
+// CRONOGRAMA DE CARGAS
+// ============================================
+
+model CargaProgramada {
+  id          String      @id @default(uuid())
+  fecha       DateTime    @db.Date // Día previsto de carga
+  cantidad    Int         // Cabezas previstas
+  categoria   String      // Texto libre: "CORDEROS", "OVEJAS FLACAS", "CAPONES"...
+  comprador   String      // Cliente / destino
+  origen      String?     // Cuadro o potrero de donde salen (ej: "AMARILLA CHICA")
+  condiciones String?     // Precio o condiciones (ej: "7.000 + IVA", "50 USD x cabeza")
+  notas       String?     @db.Text
+  estado      EstadoCarga @default(PROGRAMADA)
+
+  ventaId     String?     // Venta asociada, cuando ya existe el DUT
+  venta       Venta?      @relation(fields: [ventaId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([fecha])
+  @@index([comprador])
+}
+
+enum EstadoCarga {
+  PROGRAMADA  // Prevista
+  CARGADA     // Ya se cargó
+  CANCELADA   // Se suspendió
 }

@@ -10,6 +10,8 @@ import { documentosRoutes } from './routes/documentos.routes';
 import { pagosRoutes } from './routes/pagos.routes';
 import { dolarRoutes } from './routes/dolar.routes';
 import dutRoutes from './routes/dut.routes';
+import { cronogramaRoutes } from './routes/cronograma.routes';
+import { authenticateToken } from './middleware/auth.middleware';
 import { env } from './config/env';
 
 // Carga de env ahora se realiza en config/env.ts para asegurar orden correcto
@@ -74,7 +76,8 @@ app.use('/api/ventas', ventasRoutes);
 app.use('/api/documentos', documentosRoutes);
 app.use('/api/pagos', pagosRoutes);
 app.use('/api/dolar', dolarRoutes);
-app.use('/api/dut', dutRoutes);
+app.use('/api/dut', authenticateToken, dutRoutes);
+app.use('/api/cronograma', cronogramaRoutes);
 
 // Rutas de API inexistentes: 404 en JSON (no caer en el fallback del frontend)
 app.use('/api', (req, res) => {
