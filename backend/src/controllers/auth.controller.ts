@@ -65,9 +65,28 @@ export const authController = {
     }
   },
 
-  // Registro de usuario (solo para desarrollo)
+  // Registro de usuario: solo un admin autenticado puede crear usuarios.
+  // Excepción: si todavía no existe ningún usuario, se permite crear el primero.
   register: async (req: Request, res: Response): Promise<void> => {
     try {
+      const totalUsuarios = await prisma.usuario.count();
+      if (totalUsuarios > 0) {
+        if (!req.user) {
+          res.status(401).json({
+            error: 'Token de acceso requerido',
+            code: 'MISSING_TOKEN',
+          });
+          return;
+        }
+        if (req.user.rol !== 'ADMIN') {
+          res.status(403).json({
+            error: 'Se requieren permisos de administrador',
+            code: 'INSUFFICIENT_PERMISSIONS',
+          });
+          return;
+        }
+      }
+
       const { email, password, nombre, rol = 'ADMIN' } = req.body;
 
       if (!email || !password || !nombre) {
