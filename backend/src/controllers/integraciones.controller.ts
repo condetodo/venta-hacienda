@@ -8,9 +8,9 @@ import { env } from '../config/env';
 import { saveDocumentToStorage } from './dut.controller';
 
 // ---------------------------------------------------------------------------
-// Integración con Atlas (asistente de WhatsApp)
+// Integración con Atla (asistente de WhatsApp)
 //
-// Atlas ya extrae los datos de cada DUT y remito. Acá solo se reciben los datos
+// Atla ya extrae los datos de cada DUT y remito. Acá solo se reciben los datos
 // estructurados más el archivo original, y se crea o actualiza la venta.
 // Todo lo que entra por acá queda marcado "a revisar".
 // ---------------------------------------------------------------------------
@@ -20,14 +20,14 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024 },
 });
 
-export const atlasUpload = upload.single('archivo');
+export const atlaUpload = upload.single('archivo');
 
 const sha256 = (value: string): Buffer => crypto.createHash('sha256').update(value).digest();
 
 // Autenticación por clave de API (header X-API-Key o Authorization: Bearer)
-export const requireAtlasKey = (req: Request, res: Response, next: NextFunction): void => {
-  if (!env.ATLAS_API_KEY) {
-    res.status(503).json({ error: 'Integración con Atlas no configurada', code: 'INTEGRATION_DISABLED' });
+export const requireAtlaKey = (req: Request, res: Response, next: NextFunction): void => {
+  if (!env.ATLA_API_KEY) {
+    res.status(503).json({ error: 'Integración con Atla no configurada', code: 'INTEGRATION_DISABLED' });
     return;
   }
 
@@ -37,7 +37,7 @@ export const requireAtlasKey = (req: Request, res: Response, next: NextFunction)
     : undefined;
   const provided = (Array.isArray(header) ? header[0] : header) || bearer;
 
-  if (!provided || !crypto.timingSafeEqual(sha256(provided), sha256(env.ATLAS_API_KEY))) {
+  if (!provided || !crypto.timingSafeEqual(sha256(provided), sha256(env.ATLA_API_KEY))) {
     res.status(401).json({ error: 'Clave de API inválida', code: 'INVALID_API_KEY' });
     return;
   }
@@ -60,9 +60,9 @@ const fechaOpcional = z
 
 const payloadSchema = z.object({
   kind: z.enum(['DUT', 'REMITO']),
-  externalId: textoOpcional, // id del documento en Atlas
+  externalId: textoOpcional, // id del documento en Atla
   number: z.string().trim().min(1, 'number es requerido'), // N° de DUT o de remito
-  dutNumber: textoOpcional, // solo REMITO: N° del DUT con el que Atlas lo emparejó
+  dutNumber: textoOpcional, // solo REMITO: N° del DUT con el que Atla lo emparejó
   issuedAt: fechaOpcional,
   loadDate: fechaOpcional,
   expiresAt: fechaOpcional,
@@ -82,12 +82,12 @@ const payloadSchema = z.object({
   reviewReason: textoOpcional,
 });
 
-type AtlasPayload = z.infer<typeof payloadSchema>;
+type AtlaPayload = z.infer<typeof payloadSchema>;
 
 const normalizar = (value: string): string =>
   value.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 
-const mapEstablecimiento = (payload: AtlasPayload): Establecimiento | null => {
+const mapEstablecimiento = (payload: AtlaPayload): Establecimiento | null => {
   const texto = normalizar(`${payload.establishmentKey ?? ''} ${payload.originEstablishment ?? ''}`);
   if (/CURIOSO|ESCORIAL/.test(texto)) return 'CABO_CURIOSO';
   if (/PRADERA|LOCHIEL/.test(texto)) return 'LOCHIEL';
@@ -140,9 +140,9 @@ const adjuntarArchivo = async (
   ventaId: string,
   tipo: TipoDocumento,
   file: Express.Multer.File | undefined,
-  payload: AtlasPayload,
+  payload: AtlaPayload,
 ): Promise<{ documentoId: string | null; aviso: string | null }> => {
-  if (!file) return { documentoId: null, aviso: 'Atlas no envió el archivo original' };
+  if (!file) return { documentoId: null, aviso: 'Atla no envió el archivo original' };
   try {
     const url = await saveDocumentToStorage(file, ventaId);
     const documento = await prisma.documento.create({
@@ -159,7 +159,7 @@ const adjuntarArchivo = async (
     });
     return { documentoId: documento.id, aviso: null };
   } catch (error) {
-    console.error('Atlas: no se pudo guardar el archivo:', error);
+    console.error('Atla: no se pudo guardar el archivo:', error);
     return { documentoId: null, aviso: 'No se pudo guardar el archivo original' };
   }
 };
@@ -167,7 +167,7 @@ const adjuntarArchivo = async (
 const sumarMotivo = (actual: string | null, nuevos: string[]): string =>
   [...(actual ? actual.split('\n') : []), ...nuevos].filter((item, index, all) => item && all.indexOf(item) === index).join('\n');
 
-const procesarDUT = async (payload: AtlasPayload, file: Express.Multer.File | undefined, res: Response): Promise<void> => {
+const procesarDUT = async (payload: AtlaPayload, file: Express.Multer.File | undefined, res: Response): Promise<void> => {
   const numeroDUT = payload.number;
   const existente = await prisma.venta.findUnique({
     where: { numeroDUT },
@@ -180,15 +180,15 @@ const procesarDUT = async (payload: AtlasPayload, file: Express.Multer.File | un
     if (existente.documentos.length === 0 && file) {
       documentoId = (await adjuntarArchivo(existente.id, 'DUT', file, payload)).documentoId;
     }
-    if (!existente.atlasDocId && payload.externalId) {
-      await prisma.venta.update({ where: { id: existente.id }, data: { atlasDocId: payload.externalId } });
+    if (!existente.atlaDocId && payload.externalId) {
+      await prisma.venta.update({ where: { id: existente.id }, data: { atlaDocId: payload.externalId } });
     }
     res.json({ ok: true, action: 'exists', ventaId: existente.id, numeroDUT, documentoId });
     return;
   }
 
-  const motivos: string[] = ['DUT cargado automáticamente por Atlas'];
-  if (payload.needsReview) motivos.push(`Atlas lo marcó para revisar${payload.reviewReason ? `: ${payload.reviewReason}` : ''}`);
+  const motivos: string[] = ['DUT cargado automáticamente por Atla'];
+  if (payload.needsReview) motivos.push(`Atla lo marcó para revisar${payload.reviewReason ? `: ${payload.reviewReason}` : ''}`);
 
   const establecimiento = mapEstablecimiento(payload);
   if (!establecimiento) motivos.push('No se pudo identificar el establecimiento emisor (se asumió Lochiel)');
@@ -230,10 +230,10 @@ const procesarDUT = async (payload: AtlasPayload, file: Express.Multer.File | un
       motivo: payload.reason ?? 'SIN DATO',
       categoria: categoria ?? 'OVEJA',
       cantidadEnDUT: cantidad,
-      origenCarga: 'ATLAS',
+      origenCarga: 'ATLA',
       pendienteRevision: true,
       motivoRevision: motivos.join('\n'),
-      atlasDocId: payload.externalId,
+      atlaDocId: payload.externalId,
     },
   });
 
@@ -267,7 +267,7 @@ interface RemitoGuardado {
   origen?: string;
 }
 
-const procesarRemito = async (payload: AtlasPayload, file: Express.Multer.File | undefined, res: Response): Promise<void> => {
+const procesarRemito = async (payload: AtlaPayload, file: Express.Multer.File | undefined, res: Response): Promise<void> => {
   if (!payload.dutNumber) {
     res.status(422).json({
       error: 'El remito debe venir emparejado con un DUT (dutNumber)',
@@ -301,14 +301,14 @@ const procesarRemito = async (payload: AtlasPayload, file: Express.Multer.File |
       numero: payload.number,
       fecha: fechaCorta(fecha),
       cantidad,
-      origen: 'ATLAS',
+      origen: 'ATLA',
       ...(archivo.documentoId ? { documentoId: archivo.documentoId } : {}),
     },
   ];
   const cantidadCargada = actualizados.reduce((total, remito) => total + (remito.cantidad || 0), 0);
 
-  const motivos: string[] = [`Remito ${payload.number} cargado automáticamente por Atlas`];
-  if (payload.needsReview) motivos.push(`Atlas lo marcó para revisar${payload.reviewReason ? `: ${payload.reviewReason}` : ''}`);
+  const motivos: string[] = [`Remito ${payload.number} cargado automáticamente por Atla`];
+  if (payload.needsReview) motivos.push(`Atla lo marcó para revisar${payload.reviewReason ? `: ${payload.reviewReason}` : ''}`);
   if (!cantidad) motivos.push(`El remito ${payload.number} no tiene cantidad de cabezas`);
   if (cantidadCargada > venta.cantidadEnDUT) {
     motivos.push(`Se cargaron ${cantidadCargada} cabezas y el DUT autoriza ${venta.cantidadEnDUT}`);
@@ -345,7 +345,7 @@ const procesarRemito = async (payload: AtlasPayload, file: Express.Multer.File |
 };
 
 export const integracionesController = {
-  // Permite a Atlas comprobar que la clave y la URL son correctas
+  // Permite a Atla comprobar que la clave y la URL son correctas
   ping: (_req: Request, res: Response): void => {
     res.json({ ok: true });
   },
@@ -382,7 +382,7 @@ export const integracionesController = {
         res.status(409).json({ error: 'El DUT ya está siendo procesado, reintentá', code: 'DUPLICATE' });
         return;
       }
-      console.error('Error en integración Atlas:', error);
+      console.error('Error en integración Atla:', error);
       res.status(500).json({ error: 'Error interno del servidor', code: 'INTERNAL_SERVER_ERROR' });
     }
   },

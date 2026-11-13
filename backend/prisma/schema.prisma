@@ -78,7 +78,7 @@ model Venta {
   origenCarga           OrigenCarga @default(MANUAL) // Quién creó la venta
   pendienteRevision     Boolean     @default(false) // true = alguien tiene que confirmar los datos
   motivoRevision        String?     @db.Text // Por qué hay que revisarla
-  atlasDocId            String?     // Id del documento en Atlas
+  atlaDocId            String?     // Id del documento en Atla
   
   // === RELACIONES ===
   documentos            Documento[]
@@ -312,5 +312,5 @@ enum EstadoCarga {
 
 enum OrigenCarga {
   MANUAL  // Cargada por una persona en la plataforma
-  ATLAS   // Cargada automáticamente por Atlas (WhatsApp)
+  ATLA   // Cargada automáticamente por Atla (WhatsApp)
 }

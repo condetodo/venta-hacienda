@@ -631,7 +631,7 @@ export const ventasController = {
     }
   },
 
-  // Marca como revisada una venta cargada automáticamente (ej: por Atlas)
+  // Marca como revisada una venta cargada automáticamente (ej: por Atla)
   confirmarRevision: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;

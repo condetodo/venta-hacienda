@@ -87,7 +87,7 @@ export interface Venta {
   id: string;
 
   // === ORIGEN Y REVISIÓN ===
-  origenCarga?: 'MANUAL' | 'ATLAS';
+  origenCarga?: 'MANUAL' | 'ATLA';
   pendienteRevision?: boolean;
   motivoRevision?: string | null;
   

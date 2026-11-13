@@ -168,7 +168,7 @@ export const VentaDetail: React.FC = () => {
               <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-amber-900">
-                  {venta.origenCarga === 'ATLAS' ? 'Cargada por Atlas: revisá los datos' : 'Venta pendiente de revisión'}
+                  {venta.origenCarga === 'ATLA' ? 'Cargada por Atla: revisá los datos' : 'Venta pendiente de revisión'}
                 </p>
                 {venta.motivoRevision && (
                   <ul className="mt-1 list-disc pl-4 text-sm text-amber-800 space-y-0.5">

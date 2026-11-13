@@ -1,16 +1,16 @@
 import { Router } from 'express';
 import {
-  atlasUpload,
+  atlaUpload,
   integracionesController,
-  requireAtlasKey,
+  requireAtlaKey,
 } from '../controllers/integraciones.controller';
 
 const router = Router();
 
-// Atlas se autentica con su propia clave de API, no con un usuario
-router.use('/atlas', requireAtlasKey);
+// Atla se autentica con su propia clave de API, no con un usuario
+router.use('/atla', requireAtlaKey);
 
-router.get('/atlas/ping', integracionesController.ping);
-router.post('/atlas/documentos', atlasUpload, integracionesController.recibirDocumento);
+router.get('/atla/ping', integracionesController.ping);
+router.post('/atla/documentos', atlaUpload, integracionesController.recibirDocumento);
 
 export { router as integracionesRoutes };
