@@ -14,6 +14,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
+    "user:set": "node dist/scripts/set-user.js",
     "db:reset": "prisma migrate reset",
     "db:generate": "prisma generate",
     "prisma:generate": "prisma generate"
