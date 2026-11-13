@@ -73,6 +73,12 @@ model Venta {
   
   // === ESTADO DEL CICLO DE VENTA ===
   estado                EstadoVenta @default(PENDIENTE)
+
+  // Origen del registro y revisión de cargas automáticas
+  origenCarga           OrigenCarga @default(MANUAL) // Quién creó la venta
+  pendienteRevision     Boolean     @default(false) // true = alguien tiene que confirmar los datos
+  motivoRevision        String?     @db.Text // Por qué hay que revisarla
+  atlasDocId            String?     // Id del documento en Atlas
   
   // === RELACIONES ===
   documentos            Documento[]
@@ -302,4 +308,9 @@ enum EstadoCarga {
   PROGRAMADA  // Prevista
   CARGADA     // Ya se cargó
   CANCELADA   // Se suspendió
+}
+
+enum OrigenCarga {
+  MANUAL  // Cargada por una persona en la plataforma
+  ATLAS   // Cargada automáticamente por Atlas (WhatsApp)
 }

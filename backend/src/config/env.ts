@@ -34,6 +34,9 @@ const envSchema = z.object({
 
   // Anthropic Claude Vision API (para extracción de DUTs)
   ANTHROPIC_API_KEY: z.string().optional(),
+
+  // Clave que usa Atlas para cargar documentos (si falta, la integración queda apagada)
+  ATLAS_API_KEY: z.string().min(32, 'ATLAS_API_KEY debe tener al menos 32 caracteres').optional(),
 });
 
 // Valores por defecto para desarrollo

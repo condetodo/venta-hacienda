@@ -18,6 +18,22 @@ export const VentaDetail: React.FC = () => {
     }
   }, [id]);
 
+  const [confirmando, setConfirmando] = useState(false);
+
+  const handleConfirmarRevision = async () => {
+    if (!venta) return;
+    try {
+      setConfirmando(true);
+      const response = await ventasService.confirmarRevision(venta.id);
+      setVenta({ ...venta, ...response.venta });
+    } catch (error) {
+      console.error('Error al confirmar la revisión:', error);
+      alert('No se pudo confirmar la revisión. Probá de nuevo.');
+    } finally {
+      setConfirmando(false);
+    }
+  };
+
   const fetchVenta = async () => {
     try {
       setLoading(true);
@@ -144,6 +160,35 @@ export const VentaDetail: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {venta.pendienteRevision && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-900">
+                  {venta.origenCarga === 'ATLAS' ? 'Cargada por Atlas: revisá los datos' : 'Venta pendiente de revisión'}
+                </p>
+                {venta.motivoRevision && (
+                  <ul className="mt-1 list-disc pl-4 text-sm text-amber-800 space-y-0.5">
+                    {venta.motivoRevision.split('\n').map((motivo) => (
+                      <li key={motivo}>{motivo}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={handleConfirmarRevision}
+              disabled={confirmando}
+              className="flex-shrink-0 rounded-md bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+            >
+              {confirmando ? 'Confirmando…' : 'Confirmar revisión'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Información general */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

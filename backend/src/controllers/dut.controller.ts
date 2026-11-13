@@ -31,7 +31,7 @@ const sanitizeFileName = (name: string): string => {
     .replace(/_+/g, '_');             // Collapse multiple underscores
 };
 
-const saveDocumentToStorage = async (file: Express.Multer.File, ventaId: string): Promise<string> => {
+export const saveDocumentToStorage = async (file: Express.Multer.File, ventaId: string): Promise<string> => {
   try {
     const safeName = sanitizeFileName(file.originalname);
     const fileName = `${ventaId}/${Date.now()}-${safeName}`;

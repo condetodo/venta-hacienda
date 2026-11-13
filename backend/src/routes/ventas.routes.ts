@@ -20,6 +20,7 @@ router.delete('/:id', ventasController.delete);
 router.post('/:id/marcar-retirado', ventasController.marcarComoRetirado);
 router.patch('/:id/estado', ventasController.updateEstado);
 router.post('/:id/asignar-precio', ventasController.asignarPrecioPorKilo);
+router.post('/:id/confirmar-revision', ventasController.confirmarRevision);
 
 export { router as ventasRoutes };
 

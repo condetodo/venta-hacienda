@@ -377,6 +377,14 @@ export const VentasList: React.FC<VentasListProps> = ({
                     <tr key={venta.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {venta.numeroDUT}
+                        {venta.pendienteRevision && (
+                          <span
+                            title={venta.motivoRevision || 'Cargada automáticamente'}
+                            className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800"
+                          >
+                            A revisar
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {venta.titularDestino.length > 20 

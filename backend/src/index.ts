@@ -11,6 +11,7 @@ import { pagosRoutes } from './routes/pagos.routes';
 import { dolarRoutes } from './routes/dolar.routes';
 import dutRoutes from './routes/dut.routes';
 import { cronogramaRoutes } from './routes/cronograma.routes';
+import { integracionesRoutes } from './routes/integraciones.routes';
 import { authenticateToken } from './middleware/auth.middleware';
 import { env } from './config/env';
 
@@ -78,6 +79,7 @@ app.use('/api/pagos', pagosRoutes);
 app.use('/api/dolar', dolarRoutes);
 app.use('/api/dut', authenticateToken, dutRoutes);
 app.use('/api/cronograma', cronogramaRoutes);
+app.use('/api/integraciones', integracionesRoutes);
 
 // Rutas de API inexistentes: 404 en JSON (no caer en el fallback del frontend)
 app.use('/api', (req, res) => {

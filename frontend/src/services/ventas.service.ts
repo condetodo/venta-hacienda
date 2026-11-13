@@ -61,5 +61,11 @@ export const ventasService = {
     const response = await api.post(`/ventas/${id}/asignar-precio`, data);
     return response.data;
   },
+
+  // Confirmar que se revisó una venta cargada automáticamente
+  confirmarRevision: async (id: string): Promise<{ venta: Venta }> => {
+    const response = await api.post(`/ventas/${id}/confirmar-revision`);
+    return response.data;
+  },
 };
 

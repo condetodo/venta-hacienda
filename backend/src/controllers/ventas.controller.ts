@@ -630,5 +630,26 @@ export const ventasController = {
       });
     }
   },
-};
 
+  // Marca como revisada una venta cargada automáticamente (ej: por Atlas)
+  confirmarRevision: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const existing = await prisma.venta.findUnique({ where: { id } });
+      if (!existing) {
+        res.status(404).json({ error: 'Venta no encontrada', code: 'VENTA_NOT_FOUND' });
+        return;
+      }
+
+      const venta = await prisma.venta.update({
+        where: { id },
+        data: { pendienteRevision: false, motivoRevision: null },
+      });
+
+      res.json({ venta });
+    } catch (error) {
+      console.error('Error en confirmarRevision:', error);
+      res.status(500).json({ error: 'Error interno del servidor', code: 'INTERNAL_SERVER_ERROR' });
+    }
+  },
+};

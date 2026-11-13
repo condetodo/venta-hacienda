@@ -85,6 +85,11 @@ export interface RemitoEntry {
 
 export interface Venta {
   id: string;
+
+  // === ORIGEN Y REVISIÓN ===
+  origenCarga?: 'MANUAL' | 'ATLAS';
+  pendienteRevision?: boolean;
+  motivoRevision?: string | null;
   
   // === INFORMACIÓN GENERAL DEL DUT ===
   establecimientoEmisor: Establecimiento;
