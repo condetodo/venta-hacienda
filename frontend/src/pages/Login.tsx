@@ -7,8 +7,8 @@ import { z } from 'zod';
 import { Lock, Mail, Loader2 } from 'lucide-react';
 
 const loginSchema = z.object({
-  email: z.string().email('Email inv\u00e1lido'),
-  password: z.string().min(6, 'La contrase\u00f1a debe tener al menos 6 caracteres'),
+  email: z.string().email('Email inválido'),
+  password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
@@ -36,7 +36,7 @@ export const Login: React.FC = () => {
       setError(null);
       await login(data.email, data.password);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al iniciar sesi\u00f3n');
+      setError(err.response?.data?.error || 'Error al iniciar sesión');
     } finally {
       setIsSubmitting(false);
     }
@@ -69,7 +69,7 @@ export const Login: React.FC = () => {
             LA LOCHIEL
           </h1>
           <p className="text-green-200/80 mt-1 text-sm font-medium tracking-wide uppercase">
-            Gesti\u00f3n de Hacienda Ovina
+            Gestión de Hacienda Ovina
           </p>
         </div>
 
@@ -77,10 +77,10 @@ export const Login: React.FC = () => {
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
           <div className="mb-6">
             <h2 className="text-xl font-semibold text-gray-900">
-              Iniciar Sesi\u00f3n
+              Iniciar Sesión
             </h2>
             <p className="text-sm text-gray-500 mt-1">
-              Ingres\u00e1 tus credenciales para acceder al sistema
+              Ingresá tus credenciales para acceder al sistema
             </p>
           </div>
 
@@ -106,7 +106,7 @@ export const Login: React.FC = () => {
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Contrase\u00f1a
+                Contraseña
               </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -115,7 +115,7 @@ export const Login: React.FC = () => {
                   type="password"
                   autoComplete="current-password"
                   className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
-                  placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+                  placeholder="••••••••"
                 />
               </div>
               {errors.password && (
