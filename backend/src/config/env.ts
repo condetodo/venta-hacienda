@@ -16,12 +16,6 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET debe tener al menos 32 caracteres'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   
-  // Supabase
-  SUPABASE_URL: z.string().url('SUPABASE_URL debe ser una URL válida'),
-  SUPABASE_ANON_KEY: z.string().min(1, 'SUPABASE_ANON_KEY es requerida'),
-  SUPABASE_SERVICE_KEY: z.string().min(1, 'SUPABASE_SERVICE_KEY es requerida'),
-  SUPABASE_STORAGE_BUCKET: z.string().min(1, 'SUPABASE_STORAGE_BUCKET es requerida'),
-  
   // API Externa
   DOLAR_API_URL: z.string().url('DOLAR_API_URL debe ser una URL válida'),
   
@@ -44,10 +38,6 @@ const defaultEnv = {
   DATABASE_URL: "file:./dev.db",
   JWT_SECRET: "dev-secret-muy-seguro-cambiar-en-produccion-12345678901234567890",
   JWT_EXPIRES_IN: "7d",
-  SUPABASE_URL: "http://localhost:54321",
-  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0",
-  SUPABASE_SERVICE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU",
-  SUPABASE_STORAGE_BUCKET: "documentos-hacienda",
   DOLAR_API_URL: "https://dolarapi.com/v1",
   PORT: "3000",
   NODE_ENV: "development",

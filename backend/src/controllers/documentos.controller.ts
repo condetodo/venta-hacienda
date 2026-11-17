@@ -1,70 +1,8 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/database';
-import { uploadFile, deleteFile, getSignedUrl, supabase } from '../config/supabase';
-import { env } from '../config/env';
+import { guardarDocumento, tipoParaEntregar } from '../services/documentos-storage.service';
 
 export const documentosController = {
-  // Probar configuración de Supabase
-  testSupabase: async (req: Request, res: Response): Promise<void> => {
-    try {
-      console.log('=== TEST SUPABASE ===');
-      console.log('SUPABASE_URL:', env.SUPABASE_URL);
-      console.log('SUPABASE_SERVICE_KEY:', env.SUPABASE_SERVICE_KEY ? 'Presente' : 'Ausente');
-      console.log('SUPABASE_STORAGE_BUCKET:', env.SUPABASE_STORAGE_BUCKET);
-      
-      // Diagnóstico: validar token y coincidencia de ref
-      const serviceKey = env.SUPABASE_SERVICE_KEY;
-      let decodedPayload: any = null;
-      let tokenDiagnostics: any = {};
-      try {
-        const parts = serviceKey.split('.');
-        if (parts.length === 3) {
-          const payload = Buffer.from(parts[1], 'base64url').toString('utf8');
-          decodedPayload = JSON.parse(payload);
-          tokenDiagnostics = {
-            keyLength: serviceKey.length,
-            hasBearerPrefix: serviceKey.startsWith('Bearer '),
-            payloadRole: decodedPayload?.role,
-            payloadRef: decodedPayload?.ref,
-            urlRefMatches: typeof decodedPayload?.ref === 'string' && env.SUPABASE_URL.includes(decodedPayload.ref),
-          };
-        } else {
-          tokenDiagnostics = { error: 'Formato JWT inválido (no tiene 3 partes)' };
-        }
-      } catch (e: any) {
-        tokenDiagnostics = { error: 'No se pudo decodificar la SERVICE_KEY', details: e?.message };
-      }
-
-      // Intentar listar buckets
-      const { data: buckets, error } = await supabase.storage.listBuckets();
-      
-      if (error) {
-        console.error('Error listando buckets:', error);
-        res.status(500).json({
-          error: 'Error conectando con Supabase',
-          details: error.message,
-          diagnostics: tokenDiagnostics,
-        });
-        return;
-      }
-      
-      console.log('Buckets disponibles:', buckets);
-      
-      res.json({
-        message: 'Configuración de Supabase OK',
-        buckets: buckets.map(b => b.name),
-        bucketTarget: env.SUPABASE_STORAGE_BUCKET,
-        diagnostics: tokenDiagnostics,
-      });
-    } catch (error) {
-      console.error('Error en testSupabase:', error);
-      res.status(500).json({
-        error: 'Error interno del servidor',
-        details: error instanceof Error ? error.message : 'Error desconocido',
-      });
-    }
-  },
-
   // Obtener documentos de una venta
   getByVenta: async (req: Request, res: Response): Promise<void> => {
     try {
@@ -143,39 +81,10 @@ export const documentosController = {
       for (const file of files) {
         console.log(`Procesando archivo: ${file.originalname}`);
         
-        // Generar nombre único para el archivo
-        const timestamp = Date.now();
-        const extension = file.originalname.split('.').pop();
-        const fileName = `${tipoToEnum(tipoDocumentoRaw)}_${timestamp}.${extension}`;
-        const path = `ventas/${ventaId}/${fileName}`;
-
-        console.log('Subiendo archivo a Supabase...');
-        console.log('Bucket:', env.SUPABASE_STORAGE_BUCKET);
-        console.log('Path:', path);
-        console.log('MimeType:', file.mimetype);
-        console.log('Size:', file.size);
-
-        // Subir archivo a Supabase Storage
-        const { url } = await uploadFile(
-          env.SUPABASE_STORAGE_BUCKET,
-          path,
-          file.buffer,
-          file.mimetype
-        );
-
-        console.log('Archivo subido exitosamente:', url);
-
-        // Guardar información en base de datos
-        console.log('Creando registro en BD...');
-        const documento = await prisma.documento.create({
-          data: {
-            ventaId,
-            tipo: tipoToEnum(tipoDocumentoRaw) as any,
-            nombreArchivo: file.originalname,
-            url,
-            mimeType: file.mimetype,
-            tamano: file.size,
-          },
+        const documento = await guardarDocumento({
+          ventaId,
+          tipo: tipoToEnum(tipoDocumentoRaw),
+          file,
         });
 
         console.log('Documento creado:', documento.id);
@@ -198,7 +107,7 @@ export const documentosController = {
     }
   },
 
-  // Descargar documento
+  // Descargar documento (devuelve el archivo)
   download: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
@@ -215,14 +124,27 @@ export const documentosController = {
         return;
       }
 
-      // Generar URL firmada para descarga
-      const signedUrl = await getSignedUrl(
-        env.SUPABASE_STORAGE_BUCKET,
-        documento.url.split('/').slice(-2).join('/'), // Extraer path del archivo
-        3600 // 1 hora de expiración
-      );
+      const archivo = await prisma.documentoArchivo.findUnique({
+        where: { documentoId: id },
+      });
 
-      res.json({ downloadUrl: signedUrl });
+      // Documentos cargados antes de pasar los archivos a Postgres: el archivo ya no existe
+      if (!archivo) {
+        res.status(404).json({
+          error: 'El archivo de este documento ya no está disponible. Volvé a subirlo.',
+          code: 'ARCHIVO_NO_DISPONIBLE',
+        });
+        return;
+      }
+
+      const nombre = encodeURIComponent(documento.nombreArchivo);
+      res.set({
+        'Content-Type': tipoParaEntregar(documento.mimeType),
+        'Content-Length': String(archivo.contenido.length),
+        'Content-Disposition': `inline; filename*=UTF-8''${nombre}`,
+        'Cache-Control': 'private, max-age=3600',
+      });
+      res.send(Buffer.from(archivo.contenido));
     } catch (error) {
       console.error('Error en download documento:', error);
       res.status(500).json({
@@ -249,11 +171,7 @@ export const documentosController = {
         return;
       }
 
-      // Eliminar archivo de Supabase Storage
-      const filePath = documento.url.split('/').slice(-2).join('/');
-      await deleteFile(env.SUPABASE_STORAGE_BUCKET, filePath);
-
-      // Eliminar registro de base de datos
+      // Eliminar el registro (el archivo se borra en cascada)
       await prisma.documento.delete({
         where: { id },
       });

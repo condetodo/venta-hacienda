@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import multer from 'multer';
 import { dutExtractionService } from '../services/dut-extraction.service';
-import { supabase } from '../config/supabase';
+import { guardarDocumento } from '../services/documentos-storage.service';
 import { prisma } from '../config/database';
 
 // Configuración de multer para subida de archivos
@@ -20,69 +20,6 @@ const upload = multer({
     }
   },
 });
-
-// Función para guardar documento en Supabase Storage
-const sanitizeFileName = (name: string): string => {
-  return name
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // Remove accents
-    .replace(/[ºª°]/g, '')           // Remove special chars
-    .replace(/[^a-zA-Z0-9._-]/g, '_') // Replace anything else with _
-    .replace(/_+/g, '_');             // Collapse multiple underscores
-};
-
-export const saveDocumentToStorage = async (file: Express.Multer.File, ventaId: string): Promise<string> => {
-  try {
-    const safeName = sanitizeFileName(file.originalname);
-    const fileName = `${ventaId}/${Date.now()}-${safeName}`;
-    
-    const { data, error } = await supabase.storage
-      .from('documentos-hacienda')
-      .upload(fileName, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false
-      });
-
-    if (error) {
-      console.error('Error subiendo archivo a Supabase:', error);
-      throw new Error(`Error subiendo archivo: ${error.message}`);
-    }
-
-    // Obtener URL pública del archivo
-    const { data: urlData } = supabase.storage
-      .from('documentos-hacienda')
-      .getPublicUrl(fileName);
-
-    return urlData.publicUrl;
-  } catch (error) {
-    console.error('Error en saveDocumentToStorage:', error);
-    throw error;
-  }
-};
-
-// Función para crear registro de documento en la base de datos
-const createDocumentRecord = async (ventaId: string, file: Express.Multer.File, url: string, datosExtraidos: any) => {
-  try {
-    const documento = await prisma.documento.create({
-      data: {
-        ventaId,
-        tipo: 'DUT',
-        nombreArchivo: file.originalname,
-        url,
-        mimeType: file.mimetype,
-        tamano: file.size,
-        datosExtraidos: JSON.stringify(datosExtraidos),
-        procesadoOCR: true,
-        fechaCarga: new Date(),
-      }
-    });
-
-    return documento;
-  } catch (error) {
-    console.error('Error creando registro de documento:', error);
-    throw error;
-  }
-};
 
 export const dutController = {
   // Extraer datos de un archivo DUT
@@ -185,15 +122,15 @@ export const dutController = {
       const resultado = await dutExtractionService.processFile(req.file, tipoArchivo);
       console.log('Resultado de procesamiento:', resultado);
 
-      console.log('Guardando documento en storage...');
-      // Guardar documento en Supabase Storage
-      const documentUrl = await saveDocumentToStorage(req.file, ventaId);
-      console.log('Documento guardado en:', documentUrl);
-
-      console.log('Creando registro de documento en BD...');
-      // Crear registro en la base de datos
-      const documento = await createDocumentRecord(ventaId, req.file, documentUrl, resultado);
-      console.log('Registro de documento creado:', documento.id);
+      console.log('Guardando documento...');
+      const documento = await guardarDocumento({
+        ventaId,
+        tipo: 'DUT',
+        file: req.file,
+        datosExtraidos: JSON.stringify(resultado),
+        procesadoOCR: true,
+      });
+      console.log('Documento guardado:', documento.id);
 
       return res.json({
         success: true,
@@ -256,15 +193,9 @@ export const dutController = {
         });
       }
 
-      console.log('Guardando documento en storage...');
-      // Guardar documento en Supabase Storage
-      const documentUrl = await saveDocumentToStorage(req.file, ventaId);
-      console.log('Documento guardado en:', documentUrl);
-
-      console.log('Creando registro de documento en BD...');
-      // Crear registro en la base de datos
-      const documento = await createDocumentRecord(ventaId, req.file, documentUrl, null);
-      console.log('Registro de documento creado:', documento.id);
+      console.log('Guardando documento...');
+      const documento = await guardarDocumento({ ventaId, tipo: 'DUT', file: req.file, procesadoOCR: true });
+      console.log('Documento guardado:', documento.id);
 
       return res.json({
         success: true,

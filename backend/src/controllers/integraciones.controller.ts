@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { CategoriaAnimal, Establecimiento, Prisma, TipoDocumento } from '@prisma/client';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
-import { saveDocumentToStorage } from './dut.controller';
+import { guardarDocumento } from '../services/documentos-storage.service';
 
 // ---------------------------------------------------------------------------
 // Integración con Atla (asistente de WhatsApp)
@@ -136,6 +136,8 @@ const buscarCargaProgramada = async (fechaCarga: Date, titularDestino: string) =
   return coincidentes[0] ?? null;
 };
 
+const AVISO_ARCHIVO_NO_GUARDADO = 'No se pudo guardar el archivo original';
+
 const adjuntarArchivo = async (
   ventaId: string,
   tipo: TipoDocumento,
@@ -144,24 +146,39 @@ const adjuntarArchivo = async (
 ): Promise<{ documentoId: string | null; aviso: string | null }> => {
   if (!file) return { documentoId: null, aviso: 'Atla no envió el archivo original' };
   try {
-    const url = await saveDocumentToStorage(file, ventaId);
-    const documento = await prisma.documento.create({
-      data: {
-        ventaId,
-        tipo,
-        nombreArchivo: file.originalname,
-        url,
-        mimeType: file.mimetype,
-        tamano: file.size,
-        datosExtraidos: payload as unknown as Prisma.InputJsonValue,
-        procesadoOCR: true,
-      },
+    const documento = await guardarDocumento({
+      ventaId,
+      tipo,
+      file,
+      datosExtraidos: payload as unknown as Prisma.InputJsonValue,
+      procesadoOCR: true,
     });
     return { documentoId: documento.id, aviso: null };
   } catch (error) {
-    console.error('Atla: no se pudo guardar el archivo:', error);
-    return { documentoId: null, aviso: 'No se pudo guardar el archivo original' };
+    console.error('Atla: no se pudo guardar el archivo:', error instanceof Error ? error.message : error);
+    return { documentoId: null, aviso: AVISO_ARCHIVO_NO_GUARDADO };
   }
+};
+
+// Cuando un reenvío completa un archivo que había faltado, se quita el aviso de la venta
+// (solo si ya no queda ningún documento de Atla sin archivo).
+const limpiarAvisoArchivo = async (ventaId: string): Promise<void> => {
+  const venta = await prisma.venta.findUnique({
+    where: { id: ventaId },
+    include: { documentos: { where: { tipo: 'DUT' }, select: { id: true } } },
+  });
+  if (!venta?.motivoRevision?.includes(AVISO_ARCHIVO_NO_GUARDADO)) return;
+
+  const remitos = (Array.isArray(venta.remitos) ? venta.remitos : []) as unknown as RemitoGuardado[];
+  const faltaDUT = venta.origenCarga === 'ATLA' && venta.documentos.length === 0;
+  const faltaRemito = remitos.some((remito) => remito.origen === 'ATLA' && !remito.documentoId);
+  if (faltaDUT || faltaRemito) return;
+
+  const motivoRevision = venta.motivoRevision
+    .split('\n')
+    .filter((linea) => linea !== AVISO_ARCHIVO_NO_GUARDADO)
+    .join('\n');
+  await prisma.venta.update({ where: { id: ventaId }, data: { motivoRevision } });
 };
 
 const sumarMotivo = (actual: string | null, nuevos: string[]): string =>
@@ -179,6 +196,7 @@ const procesarDUT = async (payload: AtlaPayload, file: Express.Multer.File | und
     let documentoId: string | null = null;
     if (existente.documentos.length === 0 && file) {
       documentoId = (await adjuntarArchivo(existente.id, 'DUT', file, payload)).documentoId;
+      if (documentoId) await limpiarAvisoArchivo(existente.id);
     }
     if (!existente.atlaDocId && payload.externalId) {
       await prisma.venta.update({ where: { id: existente.id }, data: { atlaDocId: payload.externalId } });
@@ -286,8 +304,22 @@ const procesarRemito = async (payload: AtlaPayload, file: Express.Multer.File | 
   }
 
   const remitos = (Array.isArray(venta.remitos) ? venta.remitos : []) as unknown as RemitoGuardado[];
-  if (remitos.some((remito) => String(remito.numero) === payload.number)) {
-    res.json({ ok: true, action: 'exists', ventaId: venta.id, numeroDUT: venta.numeroDUT });
+  const yaCargado = remitos.find((remito) => String(remito.numero) === payload.number);
+  if (yaCargado) {
+    // El remito ya está: solo se completa el archivo si había quedado sin guardar
+    let documentoId: string | null = yaCargado.documentoId ?? null;
+    if (!documentoId && file) {
+      documentoId = (await adjuntarArchivo(venta.id, 'REMITO_CAMPO', file, payload)).documentoId;
+      if (documentoId) {
+        const completados = remitos.map((remito) => (remito === yaCargado ? { ...remito, documentoId } : remito));
+        await prisma.venta.update({
+          where: { id: venta.id },
+          data: { remitos: completados as unknown as Prisma.InputJsonValue },
+        });
+        await limpiarAvisoArchivo(venta.id);
+      }
+    }
+    res.json({ ok: true, action: 'exists', ventaId: venta.id, numeroDUT: venta.numeroDUT, documentoId });
     return;
   }
 

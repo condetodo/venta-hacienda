@@ -55,6 +55,7 @@ export const documentosService = {
   download: async (documentoId: string): Promise<Blob> => {
     const response = await api.get(`/documentos/${documentoId}/download`, {
       responseType: 'blob',
+      timeout: 60000,
     });
     return response.data;
   },

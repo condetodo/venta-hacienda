@@ -24,7 +24,6 @@ const PORT = env.PORT;
 app.set('trust proxy', 1);
 
 // Middleware de seguridad
-const supabaseOrigin = new URL(env.SUPABASE_URL).origin;
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -33,9 +32,9 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-      connectSrc: ["'self'", supabaseOrigin],
-      frameSrc: ["'self'", 'blob:', supabaseOrigin],
-      objectSrc: ["'self'", 'blob:', supabaseOrigin],
+      connectSrc: ["'self'"],
+      frameSrc: ["'self'", 'blob:'],
+      objectSrc: ["'self'", 'blob:'],
     },
   },
 }));

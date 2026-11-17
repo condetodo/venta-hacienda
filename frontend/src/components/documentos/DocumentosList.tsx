@@ -88,6 +88,33 @@ export const DocumentosList: React.FC<DocumentosListProps> = ({
     }
   };
 
+  // El archivo requiere sesión, así que se pide con el token y se abre desde memoria.
+  // La pestaña se abre antes del pedido para que el navegador no la bloquee.
+  const handleView = async (documento: Documento) => {
+    const pestana = window.open('', '_blank');
+    try {
+      const blob = await documentosService.download(documento.id);
+      const url = window.URL.createObjectURL(blob);
+      if (pestana) {
+        pestana.location.href = url;
+      } else if (!window.open(url, '_blank')) {
+        // El navegador bloqueó la pestaña nueva: se descarga el archivo
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = documento.nombreArchivo;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+      // Se libera más tarde: la pestaña necesita la URL mientras carga
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      pestana?.close();
+      console.error('Error abriendo documento:', error);
+      showError('Error', 'No se pudo abrir el documento');
+    }
+  };
+
   const handleDelete = async (documento: Documento) => {
     if (!window.confirm(`¿Estás seguro de que quieres eliminar ${documento.nombreArchivo}?`)) {
       return;
@@ -274,7 +301,7 @@ export const DocumentosList: React.FC<DocumentosListProps> = ({
                   <Download className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => window.open(documento.url, '_blank')}
+                  onClick={() => handleView(documento)}
                   className="p-2 text-gray-400 hover:text-green-600 transition-colors"
                   title="Ver"
                 >
