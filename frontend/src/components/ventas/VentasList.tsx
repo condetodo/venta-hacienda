@@ -374,7 +374,16 @@ export const VentasList: React.FC<VentasListProps> = ({
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {ventas?.map((venta) => (
-                    <tr key={venta.id} className="hover:bg-gray-50">
+                    <tr
+                      key={venta.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      title="Doble clic para ver el detalle"
+                      onDoubleClick={() => {
+                        // El doble clic selecciona texto de la fila; se limpia antes de navegar
+                        window.getSelection()?.removeAllRanges();
+                        onViewVenta?.(venta);
+                      }}
+                    >
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {venta.numeroDUT}
                         {venta.pendienteRevision && (
@@ -412,7 +421,7 @@ export const VentasList: React.FC<VentasListProps> = ({
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
+                        <div className="flex space-x-2" onDoubleClick={(e) => e.stopPropagation()}>
                           {venta.estado !== 'ROMANEO' && venta.estado !== 'EN_FRIGORIFICO' && (
                             <button
                               onClick={() => onChangeEstado?.(venta)}
